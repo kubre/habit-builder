@@ -65,7 +65,7 @@ import DailyView from '../components/DailyView.astro';
   import { initStore, toggleEntry, getInitialRenderData } from '../scripts/store';
   import { checkStrictModeViolation, getTodayGoalsStatusFromEntries, getChallengeStatsFromEntries } from '../scripts/challenge';
   import { getToday } from '../scripts/dates';
-  import { syncOnOpen } from '../scripts/sync';
+  import { syncOnOpen, tryRecoverFromCloud } from '../scripts/sync';
   import { getLocalAccount } from '../scripts/auth';
   import { escapeHTML, escapeAttr } from '../scripts/ui';
   
@@ -89,7 +89,16 @@ import DailyView from '../components/DailyView.astro';
       
       // Now all data access is INSTANT via localStorage
       const today = getToday();
-      const renderData = getInitialRenderData(today);
+      let renderData = getInitialRenderData(today);
+      
+      // If no local data, try to recover from cloud (handles Samsung storage clearing)
+      if (!renderData || !renderData.challenge) {
+        const recovered = await tryRecoverFromCloud();
+        if (recovered) {
+          // Re-fetch data after recovery
+          renderData = getInitialRenderData(today);
+        }
+      }
       
       if (!renderData || !renderData.challenge) {
         showOnboarding(appRoot, loadingState);

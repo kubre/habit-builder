@@ -253,3 +253,67 @@ export async function syncOnOpen(): Promise<SyncResult | null> {
   }
   return null;
 }
+
+/**
+ * Try to recover data from cloud when local storage is empty
+ * This handles cases where localStorage is cleared by the browser
+ * Returns true if data was recovered, false otherwise
+ */
+export async function tryRecoverFromCloud(): Promise<boolean> {
+  const account = await auth.getLocalAccount();
+  
+  // No account = can't recover
+  if (!account) {
+    console.log('No account found, cannot recover from cloud');
+    return false;
+  }
+  
+  console.log('Attempting to recover data from cloud...');
+  
+  try {
+    // Pull all data from server (no lastSyncAt = get everything)
+    const pullResult = await api.syncPull();
+    
+    if (pullResult.error) {
+      console.error('Cloud recovery failed:', pullResult.error);
+      return false;
+    }
+    
+    const serverData = pullResult.data!;
+    
+    // Check if there's any data to recover
+    if (serverData.challenges.length === 0) {
+      console.log('No challenges found on server');
+      return false;
+    }
+    
+    console.log(`Recovering ${serverData.challenges.length} challenges and ${serverData.entries.length} entries`);
+    
+    // Save all challenges
+    for (const serverChallenge of serverData.challenges) {
+      storage.saveChallenge(fromSyncChallenge(serverChallenge));
+    }
+    
+    // Save all entries
+    for (const serverEntry of serverData.entries) {
+      storage.saveEntry(fromSyncEntry(serverEntry));
+    }
+    
+    // Find and set the active challenge
+    const activeChallenge = serverData.challenges.find(c => c.status === 'active');
+    if (activeChallenge) {
+      storage.setCurrentChallengeId(activeChallenge.id);
+      console.log('Set active challenge:', activeChallenge.name);
+    }
+    
+    // Update sync timestamp
+    await auth.updateLastSyncAt(serverData.serverTime);
+    
+    console.log('Cloud recovery successful!');
+    return true;
+    
+  } catch (error) {
+    console.error('Cloud recovery error:', error);
+    return false;
+  }
+}
