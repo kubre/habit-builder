@@ -34,24 +34,26 @@ import Layout from '../layouts/Layout.astro';
   
   // Initialize and render
   async function init() {
+    // initStore() is async (handles IndexedDB migration if needed)
     await initStore();
     
     const historyList = document.getElementById('history-list')!;
     const emptyState = document.getElementById('empty-state')!;
     
-    const challenges = await getPastChallenges();
+    // getPastChallenges is now synchronous
+    const challenges = getPastChallenges();
     
     if (challenges.length === 0) {
       historyList.style.display = 'none';
       emptyState.hidden = false;
     } else {
-      await renderChallenges(challenges);
+      renderChallenges(challenges);
     }
   }
   
   init();
   
-  async function renderChallenges(challenges: any[]) {
+  function renderChallenges(challenges: any[]) {
     const historyList = document.getElementById('history-list')!;
     // Sort by end date, most recent first
     const sorted = [...challenges].sort((a, b) => {
@@ -60,9 +62,9 @@ import Layout from '../layouts/Layout.astro';
       return dateB.localeCompare(dateA);
     });
     
-    // Build HTML for each challenge (need to await entries)
-    const htmlParts = await Promise.all(sorted.map(async (challenge) => {
-      const entries = await getChallengeEntries(challenge.id);
+    // Build HTML for each challenge (now synchronous)
+    const htmlParts = sorted.map((challenge) => {
+      const entries = getChallengeEntries(challenge.id);
       const completedDays = new Set(
         entries.filter(e => e.completed).map(e => e.date)
       ).size;
@@ -128,7 +130,7 @@ import Layout from '../layouts/Layout.astro';
           ` : ''}
         </div>
       `;
-    }));
+    });
     
     historyList.innerHTML = htmlParts.join('');
   }

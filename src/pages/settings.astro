@@ -212,19 +212,21 @@ import Layout from '../layouts/Layout.astro';
   const shareDailyStatusToggle = document.getElementById('share-daily-status') as HTMLInputElement;
   const shareNotesToggle = document.getElementById('share-notes') as HTMLInputElement;
   
-  let currentConfirmAction: (() => void | Promise<void>) | null = null;
+  let currentConfirmAction: (() => void) | null = null;
   let currentChallengeData: any = null;
   
   // Initialize
   async function init() {
+    // initStore() is async (handles IndexedDB migration if needed)
     await initStore();
     
-    const challenge = await getCurrentChallenge();
+    // All store functions are now synchronous
+    const challenge = getCurrentChallenge();
     const account = await getLocalAccount();
     
     if (challenge) {
       currentChallengeData = challenge;
-      await renderChallengeCard(challenge);
+      renderChallengeCard(challenge);
       
       // Show sharing section only if user has an account
       if (account) {
@@ -251,9 +253,9 @@ import Layout from '../layouts/Layout.astro';
     sharingOptions.hidden = !visibleToFriendsToggle.checked;
     
     // Listen for changes
-    visibleToFriendsToggle.addEventListener('change', async () => {
+    visibleToFriendsToggle.addEventListener('change', () => {
       sharingOptions.hidden = !visibleToFriendsToggle.checked;
-      await saveSharingSettings();
+      saveSharingSettings();
     });
     
     shareGoalsToggle.addEventListener('change', saveSharingSettings);
@@ -262,10 +264,11 @@ import Layout from '../layouts/Layout.astro';
     shareNotesToggle.addEventListener('change', saveSharingSettings);
   }
   
-  async function saveSharingSettings() {
+  function saveSharingSettings() {
     if (!currentChallengeData) return;
     
-    await updateChallenge(currentChallengeData.id, {
+    // updateChallenge is now synchronous
+    updateChallenge(currentChallengeData.id, {
       visibleToFriends: visibleToFriendsToggle.checked,
       shareGoals: shareGoalsToggle.checked,
       shareStreak: shareStreakToggle.checked,
@@ -276,8 +279,8 @@ import Layout from '../layouts/Layout.astro';
   
   init();
   
-  async function renderChallengeCard(challenge: any) {
-    const stats = await getChallengeStats(challenge);
+  function renderChallengeCard(challenge: any) {
+    const stats = getChallengeStats(challenge);
     
     challengeCard.innerHTML = `
       <div class="challenge-info">
@@ -315,8 +318,8 @@ import Layout from '../layouts/Layout.astro';
       showConfirm(
         'Abandon Challenge?',
         'Your progress will be saved to history, but you\'ll need to start a new challenge.',
-        async () => {
-          await endChallenge(challenge.id, 'abandoned');
+        () => {
+          endChallenge(challenge.id, 'abandoned');
           window.location.href = '/';
         }
       );
@@ -325,8 +328,8 @@ import Layout from '../layouts/Layout.astro';
   
   function setupEventListeners() {
     // Export
-    document.getElementById('export-btn')?.addEventListener('click', async () => {
-      const data = await exportData();
+    document.getElementById('export-btn')?.addEventListener('click', () => {
+      const data = exportData();
       const blob = new Blob([data], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -347,8 +350,8 @@ import Layout from '../layouts/Layout.astro';
         showConfirm(
           'Import Data?',
           'This will replace all your current data with the imported data.',
-          async () => {
-            if (await importData(content)) {
+          () => {
+            if (importData(content)) {
               window.location.reload();
             } else {
               alert('Failed to import data. Please check the file format.');
@@ -364,17 +367,17 @@ import Layout from '../layouts/Layout.astro';
       showConfirm(
         'Clear All Data?',
         'This will permanently delete all your challenges, goals, and progress. This cannot be undone.',
-        async () => {
-          await clearAllData();
+        () => {
+          clearAllData();
           window.location.href = '/';
         }
       );
     });
     
     // Confirm button
-    document.getElementById('confirm-btn')?.addEventListener('click', async () => {
+    document.getElementById('confirm-btn')?.addEventListener('click', () => {
       if (currentConfirmAction) {
-        await currentConfirmAction();
+        currentConfirmAction();
       }
       hideConfirm();
     });
@@ -396,7 +399,7 @@ import Layout from '../layouts/Layout.astro';
   }
   
   // Confirmation modal
-  function showConfirm(title: string, message: string, onConfirm: () => void | Promise<void>) {
+  function showConfirm(title: string, message: string, onConfirm: () => void) {
     document.getElementById('confirm-title')!.textContent = title;
     document.getElementById('confirm-message')!.textContent = message;
     currentConfirmAction = onConfirm;

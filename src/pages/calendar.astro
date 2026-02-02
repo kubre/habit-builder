@@ -82,9 +82,11 @@ import Layout from '../layouts/Layout.astro';
   
   // Initialize and render
   async function init() {
+    // initStore() is async (handles IndexedDB migration if needed)
     await initStore();
     
-    const challenge = await getCurrentChallenge();
+    // All store functions are now synchronous
+    const challenge = getCurrentChallenge();
     const calendarGrid = document.getElementById('calendar-grid')!;
     const noChallenge = document.getElementById('no-challenge')!;
     const challengeNameEl = document.getElementById('challenge-name')!;
@@ -95,17 +97,17 @@ import Layout from '../layouts/Layout.astro';
       noChallenge.hidden = false;
     } else {
       challengeNameEl.textContent = challenge.name;
-      await renderCalendar(challenge);
+      renderCalendar(challenge);
     }
   }
   
   init();
   
-  async function renderCalendar(challenge: any) {
+  function renderCalendar(challenge: any) {
     const calendarGrid = document.getElementById('calendar-grid')!;
     
-    // Fetch entries ONCE, then compute statuses from them (no double fetch)
-    const entries = await getChallengeEntries(challenge.id);
+    // Get entries (now synchronous)
+    const entries = getChallengeEntries(challenge.id);
     const statuses = computeDayStatuses(challenge, entries);
     
     // Day headers

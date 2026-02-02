@@ -41,8 +41,8 @@ export interface ChallengeStats {
 /**
  * Get the current day number in the active challenge
  */
-export async function getCurrentDayNumber(): Promise<number> {
-  const challenge = await getCurrentChallenge();
+export function getCurrentDayNumber(): number {
+  const challenge = getCurrentChallenge();
   if (!challenge) return 0;
   return getDayNumber(challenge.startDate, getToday());
 }
@@ -83,13 +83,13 @@ export function isDayMissed(
 /**
  * Get status for each day of the challenge
  */
-export async function getDayStatuses(challenge: Challenge): Promise<DayStatus[]> {
-  const entries = await getChallengeEntries(challenge.id);
+export function getDayStatuses(challenge: Challenge): DayStatus[] {
+  const entries = getChallengeEntries(challenge.id);
   return computeDayStatuses(challenge, entries);
 }
 
 /**
- * Compute day statuses from pre-fetched entries (avoids repeated DB calls)
+ * Compute day statuses from pre-fetched entries
  */
 export function computeDayStatuses(challenge: Challenge, entries: DayEntry[]): DayStatus[] {
   const dates = getChallengeDates(challenge.startDate, challenge.duration);
@@ -125,16 +125,13 @@ export function computeDayStatuses(challenge: Challenge, entries: DayEntry[]): D
 }
 
 /**
- * Calculate current streak (consecutive days completed ending today or yesterday)
- * Accepts pre-computed statuses to avoid redundant DB calls
+ * Calculate current streak from statuses
  */
 export function calculateCurrentStreakFromStatuses(statuses: DayStatus[]): number {
   const today = getToday();
   
-  // Find today's or yesterday's index as starting point
   let startIndex = statuses.findIndex(s => s.date === today);
   
-  // If today isn't complete yet, start from yesterday
   if (startIndex >= 0 && !statuses[startIndex].isComplete) {
     startIndex--;
   }
@@ -154,23 +151,21 @@ export function calculateCurrentStreakFromStatuses(statuses: DayStatus[]): numbe
 }
 
 /**
- * Calculate current streak (legacy async version for backward compatibility)
+ * Calculate current streak
  */
-export async function calculateCurrentStreak(challenge: Challenge): Promise<number> {
-  const statuses = await getDayStatuses(challenge);
+export function calculateCurrentStreak(challenge: Challenge): number {
+  const statuses = getDayStatuses(challenge);
   return calculateCurrentStreakFromStatuses(statuses);
 }
 
 /**
- * Calculate best streak ever achieved in the challenge
- * Accepts pre-computed statuses to avoid redundant DB calls
+ * Calculate best streak from statuses
  */
 export function calculateBestStreakFromStatuses(statuses: DayStatus[]): number {
   let bestStreak = 0;
   let currentStreak = 0;
   
   for (const status of statuses) {
-    // Don't count future days
     if (status.isFuture) break;
     
     if (status.isComplete) {
@@ -185,27 +180,24 @@ export function calculateBestStreakFromStatuses(statuses: DayStatus[]): number {
 }
 
 /**
- * Calculate best streak (legacy async version for backward compatibility)
+ * Calculate best streak
  */
-export async function calculateBestStreak(challenge: Challenge): Promise<number> {
-  const statuses = await getDayStatuses(challenge);
+export function calculateBestStreak(challenge: Challenge): number {
+  const statuses = getDayStatuses(challenge);
   return calculateBestStreakFromStatuses(statuses);
 }
 
 /**
  * Get comprehensive challenge statistics
- * Optimized to fetch data once and reuse for all calculations
  */
-export async function getChallengeStats(challenge: Challenge): Promise<ChallengeStats> {
-  // Single DB call - statuses are computed once and reused
-  const statuses = await getDayStatuses(challenge);
+export function getChallengeStats(challenge: Challenge): ChallengeStats {
+  const statuses = getDayStatuses(challenge);
   const today = getToday();
   const currentDay = getDayNumber(challenge.startDate, today);
   
   const pastStatuses = statuses.filter(s => s.isPast || s.isToday);
   const completedDays = pastStatuses.filter(s => s.isComplete).length;
   
-  // Use pre-computed statuses instead of fetching again
   const currentStreak = calculateCurrentStreakFromStatuses(statuses);
   const bestStreak = calculateBestStreakFromStatuses(statuses);
   
@@ -226,21 +218,17 @@ export async function getChallengeStats(challenge: Challenge): Promise<Challenge
 }
 
 /**
- * Check for strict mode violation and handle it
- * Returns the day number that was missed, or null if no violation
+ * Check for strict mode violation
  */
-export async function checkStrictModeViolation(challenge: Challenge): Promise<number | null> {
+export function checkStrictModeViolation(challenge: Challenge): number | null {
   if (!challenge.strictMode) return null;
   if (challenge.status !== 'active') return null;
   
-  const statuses = await getDayStatuses(challenge);
-  
-  // Find the first missed day (past and not complete)
+  const statuses = getDayStatuses(challenge);
   const missedDay = statuses.find(s => s.isMissed);
   
   if (missedDay) {
-    // End the challenge as failed
-    await endChallenge(challenge.id, 'failed', missedDay.dayNumber);
+    endChallenge(challenge.id, 'failed', missedDay.dayNumber);
     return missedDay.dayNumber;
   }
   
@@ -250,12 +238,12 @@ export async function checkStrictModeViolation(challenge: Challenge): Promise<nu
 /**
  * Check if challenge is completed
  */
-export async function checkChallengeCompletion(challenge: Challenge): Promise<boolean> {
-  const stats = await getChallengeStats(challenge);
+export function checkChallengeCompletion(challenge: Challenge): boolean {
+  const stats = getChallengeStats(challenge);
   
   if (stats.currentDay >= challenge.duration && 
       stats.totalDaysCompleted === challenge.duration) {
-    await endChallenge(challenge.id, 'completed');
+    endChallenge(challenge.id, 'completed');
     return true;
   }
   
@@ -265,13 +253,13 @@ export async function checkChallengeCompletion(challenge: Challenge): Promise<bo
 /**
  * Get goals completion status for today
  */
-export async function getTodayGoalsStatus(challenge: Challenge): Promise<{
+export function getTodayGoalsStatus(challenge: Challenge): {
   goal: Goal;
   completed: boolean;
   note?: string;
-}[]> {
+}[] {
   const today = getToday();
-  const entries = await getEntriesForDate(today);
+  const entries = getEntriesForDate(today);
   
   return challenge.goals.map(goal => {
     const entry = entries.find(e => e.goalId === goal.id);
@@ -283,13 +271,8 @@ export async function getTodayGoalsStatus(challenge: Challenge): Promise<{
   });
 }
 
-// ============================================
-// Pre-fetched data functions (no additional DB calls)
-// ============================================
-
 /**
- * Get goals completion status for today from pre-fetched entries
- * No DB calls - uses provided data
+ * Get goals completion status from pre-fetched entries
  */
 export function getTodayGoalsStatusFromEntries(
   challenge: Challenge, 
@@ -306,8 +289,7 @@ export function getTodayGoalsStatusFromEntries(
 }
 
 /**
- * Get comprehensive challenge statistics from pre-fetched entries
- * No DB calls - uses provided data
+ * Get challenge statistics from pre-fetched entries
  */
 export function getChallengeStatsFromEntries(
   challenge: Challenge,
@@ -320,7 +302,6 @@ export function getChallengeStatsFromEntries(
   const pastStatuses = statuses.filter(s => s.isPast || s.isToday);
   const completedDays = pastStatuses.filter(s => s.isComplete).length;
   
-  // Use pre-computed statuses instead of fetching again
   const currentStreak = calculateCurrentStreakFromStatuses(statuses);
   const bestStreak = calculateBestStreakFromStatuses(statuses);
   

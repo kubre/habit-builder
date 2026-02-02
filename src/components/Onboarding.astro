@@ -363,7 +363,7 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
   
   document.getElementById('back-3')?.addEventListener('click', () => goToStep(2));
   
-  document.getElementById('start-challenge')?.addEventListener('click', async () => {
+  document.getElementById('start-challenge')?.addEventListener('click', () => {
     const name = challengeNameInput.value.trim();
     const validGoals = goals.filter(g => g.name.length >= 2);
     const strictMode = strictModeCheckbox.checked;
@@ -378,7 +378,8 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
     }
     
     if (name && validGoals.length >= 1) {
-      await createChallenge(name, validGoals, selectedDuration, strictMode);
+      // createChallenge is now synchronous
+      createChallenge(name, validGoals, selectedDuration, strictMode);
       window.location.reload();
     }
   });

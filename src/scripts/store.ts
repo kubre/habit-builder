@@ -1,5 +1,6 @@
 // ============================================
-// Habit Build - Data Store (IndexedDB)
+// Habit Build - Data Store (localStorage)
+// Synchronous storage for instant performance
 // ============================================
 
 import type { 
@@ -8,23 +9,15 @@ import type {
   DayEntry, 
   Goal 
 } from './types';
-import * as db from './db';
-import { 
-  withCache, 
-  invalidateUserDataCache, 
-  CACHE_TTL,
-  invalidateCache 
-} from './cache';
+import * as storage from './localStorage';
 
 /**
  * Generate a unique ID using native crypto.randomUUID()
  */
 export function generateId(): string {
-  // Use native browser crypto API
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-  // Fallback for older browsers
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
@@ -33,29 +26,24 @@ export function generateId(): string {
 // ============================================
 
 /**
- * Get the current active challenge (cached)
+ * Get the current active challenge
+ * Now synchronous - instant access from localStorage
  */
-export async function getCurrentChallenge(): Promise<Challenge | null> {
-  return withCache(
-    'currentChallenge',
-    CACHE_TTL.currentChallenge,
-    async () => {
-      const currentId = await db.getSetting<string>('currentChallengeId');
-      if (!currentId) return null;
-      return db.getChallenge(currentId);
-    }
-  );
+export function getCurrentChallenge(): Challenge | null {
+  const currentId = storage.getCurrentChallengeId();
+  if (!currentId) return null;
+  return storage.getChallenge(currentId);
 }
 
 /**
  * Create a new challenge and set it as active
  */
-export async function createChallenge(
+export function createChallenge(
   name: string,
   goals: Omit<Goal, 'id'>[],
   duration: number,
   strictMode: boolean
-): Promise<Challenge> {
+): Challenge {
   const now = new Date().toISOString();
   const challenge: Challenge = {
     id: generateId(),
@@ -68,11 +56,8 @@ export async function createChallenge(
     updatedAt: now
   };
   
-  await db.saveChallenge(challenge);
-  await db.setSetting('currentChallengeId', challenge.id);
-  
-  // Invalidate cache since data changed
-  invalidateUserDataCache();
+  storage.saveChallenge(challenge);
+  storage.setCurrentChallengeId(challenge.id);
   
   return challenge;
 }
@@ -80,11 +65,11 @@ export async function createChallenge(
 /**
  * Update an existing challenge
  */
-export async function updateChallenge(
+export function updateChallenge(
   challengeId: string, 
   updates: Partial<Omit<Challenge, 'id'>>
-): Promise<Challenge | null> {
-  const challenge = await db.getChallenge(challengeId);
+): Challenge | null {
+  const challenge = storage.getChallenge(challengeId);
   if (!challenge) return null;
   
   const updated = { 
@@ -92,10 +77,7 @@ export async function updateChallenge(
     ...updates,
     updatedAt: new Date().toISOString()
   };
-  await db.saveChallenge(updated);
-  
-  // Invalidate cache since data changed
-  invalidateUserDataCache();
+  storage.saveChallenge(updated);
   
   return updated;
 }
@@ -103,12 +85,12 @@ export async function updateChallenge(
 /**
  * End a challenge (complete, fail, or abandon)
  */
-export async function endChallenge(
+export function endChallenge(
   challengeId: string,
   status: 'completed' | 'failed' | 'abandoned',
   failedOnDay?: number
-): Promise<void> {
-  const challenge = await db.getChallenge(challengeId);
+): void {
+  const challenge = storage.getChallenge(challengeId);
   if (!challenge) return;
   
   const now = new Date().toISOString();
@@ -120,31 +102,21 @@ export async function endChallenge(
     challenge.failedOnDay = failedOnDay;
   }
   
-  await db.saveChallenge(challenge);
+  storage.saveChallenge(challenge);
   
   // Clear current challenge if it was the active one
-  const currentId = await db.getSetting<string>('currentChallengeId');
+  const currentId = storage.getCurrentChallengeId();
   if (currentId === challengeId) {
-    await db.setSetting('currentChallengeId', null);
+    storage.setCurrentChallengeId(null);
   }
-  
-  // Invalidate cache since data changed
-  invalidateUserDataCache();
 }
 
 /**
- * Get all past (non-active) challenges (cached)
+ * Get all past (non-active) challenges
  */
-export async function getPastChallenges(): Promise<Challenge[]> {
-  return withCache(
-    'challenges',
-    CACHE_TTL.challenges,
-    async () => {
-      const challenges = await db.getAllChallenges();
-      return challenges.filter(c => c.status !== 'active');
-    },
-    'past'
-  );
+export function getPastChallenges(): Challenge[] {
+  const challenges = storage.getAllChallenges();
+  return challenges.filter(c => c.status !== 'active');
 }
 
 // ============================================
@@ -152,49 +124,39 @@ export async function getPastChallenges(): Promise<Challenge[]> {
 // ============================================
 
 /**
- * Get all entries for a specific challenge (cached)
- * Uses IndexedDB goalId index for faster queries on mobile
+ * Get all entries for a specific challenge
  */
-export async function getChallengeEntries(challengeId: string): Promise<DayEntry[]> {
-  return withCache(
-    'entries',
-    CACHE_TTL.entries,
-    async () => {
-      const challenge = await db.getChallenge(challengeId);
-      if (!challenge) return [];
-      
-      const goalIds = challenge.goals.map(g => g.id);
-      
-      // Use index-based query - much faster than getAllEntries + filter
-      return db.getEntriesByGoalIds(goalIds);
-    },
-    challengeId
-  );
+export function getChallengeEntries(challengeId: string): DayEntry[] {
+  const challenge = storage.getChallenge(challengeId);
+  if (!challenge) return [];
+  
+  const goalIds = challenge.goals.map(g => g.id);
+  return storage.getEntriesByGoalIds(goalIds);
 }
 
 /**
  * Get entries for a specific date
  */
-export async function getEntriesForDate(date: string): Promise<DayEntry[]> {
-  return db.getEntriesByDate(date);
+export function getEntriesForDate(date: string): DayEntry[] {
+  return storage.getEntriesByDate(date);
 }
 
 /**
  * Get entry for a specific goal on a specific date
  */
-export async function getEntry(date: string, goalId: string): Promise<DayEntry | null> {
-  return db.getEntry(date, goalId);
+export function getEntry(date: string, goalId: string): DayEntry | null {
+  return storage.getEntry(date, goalId);
 }
 
 /**
  * Set/update an entry for a goal on a date
  */
-export async function setEntry(
+export function setEntry(
   date: string, 
   goalId: string, 
   completed: boolean,
   note?: string
-): Promise<DayEntry> {
+): DayEntry {
   const entry: DayEntry = {
     date,
     goalId,
@@ -203,20 +165,15 @@ export async function setEntry(
     updatedAt: new Date().toISOString()
   };
   
-  await db.saveEntry(entry);
-  
-  // Invalidate entries cache for this challenge
-  invalidateCache('entries');
-  invalidateCache('currentChallenge');
-  
+  storage.saveEntry(entry);
   return entry;
 }
 
 /**
  * Toggle completion status for a goal on a date
  */
-export async function toggleEntry(date: string, goalId: string): Promise<DayEntry> {
-  const existing = await db.getEntry(date, goalId);
+export function toggleEntry(date: string, goalId: string): DayEntry {
+  const existing = storage.getEntry(date, goalId);
   const completed = existing ? !existing.completed : true;
   return setEntry(date, goalId, completed, existing?.note);
 }
@@ -224,12 +181,12 @@ export async function toggleEntry(date: string, goalId: string): Promise<DayEntr
 /**
  * Update note for an entry
  */
-export async function updateEntryNote(
+export function updateEntryNote(
   date: string, 
   goalId: string, 
   note: string
-): Promise<DayEntry | null> {
-  const existing = await db.getEntry(date, goalId);
+): DayEntry | null {
+  const existing = storage.getEntry(date, goalId);
   if (!existing) return null;
   return setEntry(date, goalId, existing.completed, note);
 }
@@ -241,15 +198,19 @@ export async function updateEntryNote(
 /**
  * Export all data as JSON
  */
-export async function exportData(): Promise<string> {
-  const state = await db.exportAllData();
-  return JSON.stringify(state, null, 2);
+export function exportData(): string {
+  const data = storage.exportAllData();
+  return JSON.stringify({
+    currentChallengeId: data.currentChallengeId,
+    challenges: data.challenges,
+    entries: data.entries
+  }, null, 2);
 }
 
 /**
  * Import data from JSON
  */
-export async function importData(json: string): Promise<boolean> {
+export function importData(json: string): boolean {
   try {
     const data = JSON.parse(json) as AppState;
     
@@ -258,7 +219,12 @@ export async function importData(json: string): Promise<boolean> {
       throw new Error('Invalid data structure');
     }
     
-    await db.importAllData(data);
+    storage.importAllData({
+      version: 1,
+      currentChallengeId: data.currentChallengeId,
+      challenges: data.challenges,
+      entries: data.entries
+    });
     return true;
   } catch (e) {
     console.error('Failed to import data:', e);
@@ -269,53 +235,48 @@ export async function importData(json: string): Promise<boolean> {
 /**
  * Clear all data
  */
-export async function clearAllData(): Promise<void> {
-  await db.clearAllData();
-  invalidateUserDataCache();
+export function clearAllData(): void {
+  storage.clearAllData();
 }
 
 /**
- * Initialize the database connection
+ * Initialize the store - migrates from IndexedDB if needed
  */
 export async function initStore(): Promise<void> {
-  await db.openDB();
+  await storage.initStorage();
 }
 
 /**
- * Check if database is available
+ * Check if storage is available
  */
 export function isStoreAvailable(): boolean {
-  return db.isDBAvailable();
+  return typeof localStorage !== 'undefined';
 }
 
 /**
- * Get all data needed for initial app render in a SINGLE IndexedDB transaction
- * This is dramatically faster on mobile Safari than multiple separate calls
+ * Get all data needed for initial app render
+ * Instant access from localStorage - no async needed
  */
-export async function getInitialRenderData(today: string): Promise<{
+export function getInitialRenderData(today: string): {
   challenge: Challenge | null;
   todayEntries: DayEntry[];
   allEntries: DayEntry[];
-} | null> {
-  try {
-    const state = await db.getAppStateForRender(today);
-    
-    if (!state.currentChallenge) {
-      return null;
-    }
-    
-    // Filter entries to only those belonging to current challenge's goals
-    const goalIds = new Set(state.currentChallenge.goals.map(g => g.id));
-    const challengeEntries = state.allChallengeEntries.filter(e => goalIds.has(e.goalId));
-    const todayEntries = state.todayEntries.filter(e => goalIds.has(e.goalId));
-    
-    return {
-      challenge: state.currentChallenge,
-      todayEntries,
-      allEntries: challengeEntries
-    };
-  } catch (error) {
-    console.error('Failed to get initial render data:', error);
+} | null {
+  const challenge = getCurrentChallenge();
+  
+  if (!challenge) {
     return null;
   }
+  
+  const goalIds = challenge.goals.map(g => g.id);
+  const allEntries = storage.getEntriesByGoalIds(goalIds);
+  const todayEntries = storage.getEntriesByDate(today).filter(e => 
+    goalIds.includes(e.goalId)
+  );
+  
+  return {
+    challenge,
+    todayEntries,
+    allEntries
+  };
 }

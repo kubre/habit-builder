@@ -3,7 +3,7 @@
 // ============================================
 
 import * as api from './api';
-import * as db from './db';
+import * as storage from './localStorage';
 import * as auth from './auth';
 import type { Challenge, DayEntry } from './types';
 
@@ -59,7 +59,7 @@ function fromSyncChallenge(sync: api.SyncChallenge): Challenge {
     shareStreak: sync.shareStreak,
     shareDailyStatus: sync.shareDailyStatus,
     shareNotes: sync.shareNotes,
-    goals: sync.goals,
+    goals: sync.goals as Challenge['goals'], // Cast since API types are looser
     updatedAt: sync.updatedAt,
   };
 }
@@ -129,11 +129,9 @@ export async function performSync(): Promise<SyncResult> {
     let pulledChallenges = 0;
     let pulledEntries = 0;
     
-    // Step 2: Fetch all local data ONCE for efficient comparison
-    const [localChallenges, localEntries] = await Promise.all([
-      db.getAllChallenges(),
-      db.getAllEntries()
-    ]);
+    // Step 2: Fetch all local data (now synchronous from localStorage)
+    const localChallenges = storage.getAllChallenges();
+    const localEntries = storage.getAllEntries();
     
     // Build lookup maps for O(1) access instead of O(n) per item
     const localChallengeMap = new Map(localChallenges.map(c => [c.id, c]));
@@ -146,7 +144,7 @@ export async function performSync(): Promise<SyncResult> {
       // If no local version, or server is newer, use server version
       if (!localChallenge || 
           (serverChallenge.updatedAt > (localChallenge.updatedAt || ''))) {
-        await db.saveChallenge(fromSyncChallenge(serverChallenge));
+        storage.saveChallenge(fromSyncChallenge(serverChallenge));
         pulledChallenges++;
       }
     }
@@ -158,7 +156,7 @@ export async function performSync(): Promise<SyncResult> {
       // If no local version, or server is newer, use server version
       if (!localEntry || 
           (serverEntry.updatedAt > (localEntry.updatedAt || ''))) {
-        await db.saveEntry(fromSyncEntry(serverEntry));
+        storage.saveEntry(fromSyncEntry(serverEntry));
         pulledEntries++;
       }
     }

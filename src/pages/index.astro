@@ -62,17 +62,12 @@ import DailyView from '../components/DailyView.astro';
 </Layout>
 
 <script>
-  import { getCurrentChallenge, initStore, toggleEntry, getInitialRenderData } from '../scripts/store';
-  import { getTodayGoalsStatus, getChallengeStats, checkStrictModeViolation, getTodayGoalsStatusFromEntries, getChallengeStatsFromEntries } from '../scripts/challenge';
+  import { initStore, toggleEntry, getInitialRenderData } from '../scripts/store';
+  import { checkStrictModeViolation, getTodayGoalsStatusFromEntries, getChallengeStatsFromEntries } from '../scripts/challenge';
   import { getToday } from '../scripts/dates';
   import { syncOnOpen } from '../scripts/sync';
   import { getLocalAccount } from '../scripts/auth';
   import { escapeHTML, escapeAttr } from '../scripts/ui';
-  
-  // Constants for localStorage cache
-  const HAS_CHALLENGE_KEY = 'habit-build-has-challenge';
-  const SNAPSHOT_KEY = 'habit-build-snapshot';
-  const SNAPSHOT_MAX_AGE = 5 * 60 * 1000; // 5 minutes
   
   // Polyfill for requestIdleCallback
   const requestIdleCallback = window.requestIdleCallback || ((cb: Function) => setTimeout(cb, 1));
@@ -84,115 +79,37 @@ import DailyView from '../components/DailyView.astro';
     initApp();
   }
   
-  interface Snapshot {
-    challenge: any;
-    goalStatuses: any[];
-    stats: any;
-    today: string;
-    timestamp: number;
-  }
-  
-  function getSnapshot(): Snapshot | null {
-    try {
-      const raw = localStorage.getItem(SNAPSHOT_KEY);
-      if (!raw) return null;
-      const snapshot = JSON.parse(raw) as Snapshot;
-      
-      // Validate snapshot is fresh and for today
-      const now = Date.now();
-      const today = getToday();
-      if (now - snapshot.timestamp > SNAPSHOT_MAX_AGE) return null;
-      if (snapshot.today !== today) return null;
-      
-      return snapshot;
-    } catch {
-      return null;
-    }
-  }
-  
-  function saveSnapshot(challenge: any, goalStatuses: any[], stats: any) {
-    try {
-      const snapshot: Snapshot = {
-        challenge,
-        goalStatuses,
-        stats,
-        today: getToday(),
-        timestamp: Date.now()
-      };
-      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
-      localStorage.setItem(HAS_CHALLENGE_KEY, 'true');
-    } catch (e) {
-      // localStorage might be full, ignore
-    }
-  }
-  
-  function clearSnapshot() {
-    localStorage.removeItem(SNAPSHOT_KEY);
-    localStorage.setItem(HAS_CHALLENGE_KEY, 'false');
-  }
-  
   async function initApp() {
     const appRoot = document.getElementById('app-root')!;
     const loadingState = document.getElementById('loading-state')!;
     
-    // PHASE 1: Try to render INSTANTLY from localStorage snapshot
-    const snapshot = getSnapshot();
-    if (snapshot) {
-      // Render immediately from cache - no waiting!
-      renderDailyView(appRoot, loadingState, snapshot.challenge, snapshot.goalStatuses, snapshot.stats);
-      
-      // Verify and update from IndexedDB in background
-      verifyAndUpdateFromDB(appRoot, snapshot.challenge);
-      return;
-    }
-    
-    // Quick check: if we know there's no challenge, show onboarding immediately
-    const cachedHasChallenge = localStorage.getItem(HAS_CHALLENGE_KEY);
-    if (cachedHasChallenge === 'false') {
-      showOnboarding(appRoot, loadingState);
-      // Still init DB in background to verify
-      initStore().then(() => getCurrentChallenge()).then(challenge => {
-        if (challenge) {
-          localStorage.setItem(HAS_CHALLENGE_KEY, 'true');
-          window.location.reload();
-        }
-      });
-      return;
-    }
-    
-    // PHASE 2: No snapshot available, load from IndexedDB
     try {
+      // Initialize storage (handles IndexedDB migration if needed)
       await initStore();
       
-      // SINGLE TRANSACTION: Get all data in one IndexedDB transaction
-      // This is MUCH faster on iOS than multiple separate calls
+      // Now all data access is INSTANT via localStorage
       const today = getToday();
-      const renderData = await getInitialRenderData(today);
+      const renderData = getInitialRenderData(today);
       
       if (!renderData || !renderData.challenge) {
-        clearSnapshot();
         showOnboarding(appRoot, loadingState);
         return;
       }
       
       const { challenge, todayEntries, allEntries } = renderData;
       
-      // Compute stats from pre-fetched data (no additional DB calls)
+      // Compute stats from pre-fetched data (all synchronous now)
       const goalStatuses = getTodayGoalsStatusFromEntries(challenge, todayEntries);
       const stats = getChallengeStatsFromEntries(challenge, allEntries);
-      
-      // Save snapshot for next time
-      saveSnapshot(challenge, goalStatuses, stats);
       
       // Render the daily view
       renderDailyView(appRoot, loadingState, challenge, goalStatuses, stats);
       
-      // Run deferred operations
+      // Run deferred operations (sync, strict mode check)
       runDeferredOperations(challenge);
       
     } catch (error) {
       console.error('Failed to initialize app:', error);
-      clearSnapshot();
       showOnboarding(appRoot, loadingState);
     }
   }
@@ -210,60 +127,18 @@ import DailyView from '../components/DailyView.astro';
     initDailyViewInteractions();
   }
   
-  async function verifyAndUpdateFromDB(appRoot: HTMLElement, cachedChallenge: any) {
-    try {
-      await initStore();
-      const challenge = await getCurrentChallenge();
-      
-      if (!challenge) {
-        // Challenge was deleted, reload to show onboarding
-        clearSnapshot();
-        window.location.reload();
-        return;
-      }
-      
-      // Fetch fresh data
-      const [goalStatuses, stats] = await Promise.all([
-        getTodayGoalsStatus(challenge),
-        getChallengeStats(challenge)
-      ]);
-      
-      // Update snapshot
-      saveSnapshot(challenge, goalStatuses, stats);
-      
-      // Check if data changed significantly (goal completion status or challenge details)
-      const challengeChanged = cachedChallenge.id !== challenge.id || 
-                               cachedChallenge.goals?.length !== challenge.goals?.length;
-      const needsRerender = challengeChanged;
-      
-      if (needsRerender) {
-        // Re-render with fresh data
-        const loadingState = document.createElement('div');
-        renderDailyView(appRoot, loadingState, challenge, goalStatuses, stats);
-      }
-      
-      // Run deferred operations
-      runDeferredOperations(challenge);
-      
-    } catch (error) {
-      console.warn('Background verification failed:', error);
-    }
-  }
-  
   function runDeferredOperations(challenge: any) {
     requestIdleCallback(() => {
-      // Check strict mode violation
+      // Check strict mode violation (synchronous now)
       if (challenge.strictMode) {
-        checkStrictModeViolation(challenge).then(failedDay => {
-          if (failedDay !== null) {
-            clearSnapshot();
-            showStrictFailureModal(failedDay);
-            setTimeout(() => window.location.reload(), 100);
-          }
-        });
+        const failedDay = checkStrictModeViolation(challenge);
+        if (failedDay !== null) {
+          showStrictFailureModal(failedDay);
+          setTimeout(() => window.location.reload(), 100);
+        }
       }
       
-      // Sync with server
+      // Sync with server (async, but deferred)
       getLocalAccount().then(account => {
         if (account) {
           syncOnOpen().catch(err => console.warn('Sync error:', err));
@@ -445,15 +320,15 @@ import DailyView from '../components/DailyView.astro';
     const goalsList = document.getElementById('goals-list');
     
     // Handle goal toggle - entire card is now clickable
-    goalsList?.addEventListener('click', async (e: Event) => {
+    goalsList?.addEventListener('click', (e: Event) => {
       const target = e.target as HTMLElement;
       const card = target.closest('[data-action="toggle"]') as HTMLElement;
       
       if (card) {
         const goalId = card.dataset.goalId!;
         
-        // Toggle in store (async)
-        const entry = await toggleEntry(today, goalId);
+        // Toggle in store (now synchronous!)
+        const entry = toggleEntry(today, goalId);
         
         // Update UI
         card.classList.toggle('goal-card--completed', entry.completed);

@@ -1,11 +1,11 @@
 // ============================================
 // Habit Build - Auth & Account Management
+// Uses localStorage for instant access
 // ============================================
 
-import * as db from './db';
-
-// Account store key
-const ACCOUNT_KEY = 'account';
+// Storage keys
+const ACCOUNT_STORAGE_KEY = 'habit-build-account';
+const TOKEN_STORAGE_KEY = 'habit-build-token';
 
 export interface LocalAccount {
   id: string;
@@ -21,10 +21,8 @@ export interface LocalAccount {
  * Get the stored auth token
  */
 export function getAuthToken(): string | null {
-  // Try localStorage first for quick access
   if (typeof localStorage !== 'undefined') {
-    const token = localStorage.getItem('habit-build-token');
-    if (token) return token;
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
   }
   return null;
 }
@@ -34,7 +32,7 @@ export function getAuthToken(): string | null {
  */
 export function setAuthToken(token: string): void {
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('habit-build-token', token);
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
   }
 }
 
@@ -43,16 +41,20 @@ export function setAuthToken(token: string): void {
  */
 export function clearAuthToken(): void {
   if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('habit-build-token');
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
   }
 }
 
 /**
- * Get the local account info
+ * Get the local account info (now sync but kept async interface for compatibility)
  */
 export async function getLocalAccount(): Promise<LocalAccount | null> {
+  if (typeof localStorage === 'undefined') return null;
+  
   try {
-    return await db.getSetting<LocalAccount>(ACCOUNT_KEY);
+    const raw = localStorage.getItem(ACCOUNT_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as LocalAccount;
   } catch {
     return null;
   }
@@ -62,8 +64,10 @@ export async function getLocalAccount(): Promise<LocalAccount | null> {
  * Save local account info
  */
 export async function saveLocalAccount(account: LocalAccount): Promise<void> {
-  await db.setSetting(ACCOUNT_KEY, account);
-  setAuthToken(account.authToken);
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(account));
+    setAuthToken(account.authToken);
+  }
 }
 
 /**
@@ -80,7 +84,9 @@ export async function updateLocalAccount(updates: Partial<LocalAccount>): Promis
  * Clear local account (logout)
  */
 export async function clearLocalAccount(): Promise<void> {
-  await db.deleteSetting(ACCOUNT_KEY);
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(ACCOUNT_STORAGE_KEY);
+  }
   clearAuthToken();
 }
 
