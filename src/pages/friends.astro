@@ -253,7 +253,7 @@ import Layout from '../layouts/Layout.astro';
     markRecoveryPhraseShown,
   } from '../scripts/auth';
   import * as api from '../scripts/api';
-  import type { FeedItem, FriendGoalDetail } from '../scripts/api';
+  import type { FeedItem } from '../scripts/api';
   import { syncOnOpen } from '../scripts/sync';
   import { escapeHTML, escapeAttr } from '../scripts/ui';
   
@@ -572,9 +572,22 @@ import Layout from '../layouts/Layout.astro';
           <span class="friend-name">${escapeHTML(friend.name)}</span>
           <span class="friend-code">${escapeHTML(friend.friendCode)}</span>
         </div>
-        <button class="btn btn-ghost btn-sm friend-remove-btn" data-friendship-id="${escapeAttr(friend.friendshipId)}">
-          Unfriend
-        </button>
+        <div class="friend-actions">
+          ${friend.activeChallenge ? `
+            <button class="btn btn-ghost btn-sm view-challenge-btn"
+              data-friend-id="${escapeAttr(friend.id)}"
+              data-friend-name="${escapeAttr(friend.name)}"
+              data-challenge-id="${escapeAttr(friend.activeChallenge.id)}"
+              data-challenge-name="${escapeAttr(friend.activeChallenge.name)}"
+              data-day="${friend.activeChallenge.currentDay}"
+              data-total-days="${friend.activeChallenge.totalDays}">
+              View
+            </button>
+          ` : ''}
+          <button class="btn btn-ghost btn-sm friend-remove-btn" data-friendship-id="${escapeAttr(friend.friendshipId)}">
+            Unfriend
+          </button>
+        </div>
       </div>
     `).join('');
     
@@ -604,6 +617,14 @@ import Layout from '../layouts/Layout.astro';
         
         // Reload feed
         await loadFeed();
+      });
+    });
+    
+    // Handle view challenge button
+    list.querySelectorAll('.view-challenge-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openActivityDetail(btn as HTMLElement);
       });
     });
   }
@@ -672,7 +693,10 @@ import Layout from '../layouts/Layout.astro';
     const friendName = card.dataset.friendName!;
     const challengeId = card.dataset.challengeId!;
     const challengeName = card.dataset.challengeName!;
-    const date = card.dataset.date!;
+    // Use today's date if not provided (for friend card "View" button)
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const date = card.dataset.date || todayStr;
     const day = card.dataset.day!;
     const totalDays = card.dataset.totalDays!;
     
@@ -951,6 +975,13 @@ import Layout from '../layouts/Layout.astro';
     color: var(--text-muted);
   }
   
+  .friend-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+  }
+  
   .friend-remove-btn {
     color: var(--text-muted);
     flex-shrink: 0;
@@ -958,6 +989,15 @@ import Layout from '../layouts/Layout.astro';
   
   .friend-remove-btn:hover {
     color: var(--accent-danger);
+  }
+  
+  .view-challenge-btn {
+    color: var(--accent-primary);
+  }
+  
+  .view-challenge-btn:hover {
+    background-color: var(--accent-primary);
+    color: white;
   }
   
   .empty-friends {

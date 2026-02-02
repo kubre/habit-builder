@@ -54,6 +54,12 @@ export interface Friend {
   friendCode: string;
   friendshipId: string;
   since: string;
+  activeChallenge?: {
+    id: string;
+    name: string;
+    currentDay: number;
+    totalDays: number;
+  };
 }
 
 export interface FeedItem {

@@ -511,12 +511,12 @@ textarea.input {
 /* ============================================
    Goal Color Utilities
    ============================================ */
-.goal-coral { --goal-color: var(--goal-coral); }
-.goal-sage { --goal-color: var(--goal-sage); }
-.goal-gold { --goal-color: var(--goal-gold); }
-.goal-slate { --goal-color: var(--goal-slate); }
-.goal-sky { --goal-color: var(--goal-sky); }
-.goal-plum { --goal-color: var(--goal-plum); }
+.goal-coral { color: var(--goal-coral); --goal-color: var(--goal-coral); }
+.goal-sage { color: var(--goal-sage); --goal-color: var(--goal-sage); }
+.goal-gold { color: var(--goal-gold); --goal-color: var(--goal-gold); }
+.goal-slate { color: var(--goal-slate); --goal-color: var(--goal-slate); }
+.goal-sky { color: var(--goal-sky); --goal-color: var(--goal-sky); }
+.goal-plum { color: var(--goal-plum); --goal-color: var(--goal-plum); }
 
 /* ============================================
    Visually Hidden (Accessibility)

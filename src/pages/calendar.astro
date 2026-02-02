@@ -150,20 +150,6 @@ import Layout from '../layouts/Layout.astro';
       dayNum.textContent = String(status.dayNumber);
       cell.appendChild(dayNum);
       
-      // Completion indicator
-      if (!status.isFuture) {
-        const indicator = document.createElement('span');
-        indicator.className = 'cell-indicator';
-        if (status.isComplete) {
-          indicator.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-        } else if (status.completedGoals > 0) {
-          indicator.textContent = `${status.completedGoals}/${status.totalGoals}`;
-        } else if (status.isMissed) {
-          indicator.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-        }
-        cell.appendChild(indicator);
-      }
-      
       // Click handler
       cell.addEventListener('click', () => showDayModal(status, challenge, entries));
       
