@@ -9,9 +9,10 @@ A browser-based habit tracking app for building lasting habits through daily che
 - **Framework**: Astro 5.x (static site generation with islands architecture)
 - **Language**: TypeScript (strict mode)
 - **Styling**: Vanilla CSS with CSS variables
-- **State**: IndexedDB (browser-only, no server)
+- **State**: IndexedDB (local) + Cloudflare D1 (cloud sync)
 - **Build Tool**: Bun 1.3.x (package manager, bundler, test runner)
-- **Deployment**: Cloudflare Pages
+- **Deployment**: Cloudflare Pages + Cloudflare Functions
+- **Database**: Cloudflare D1 (SQLite)
 - **Dependencies**: Zero runtime dependencies
 
 ## Documentation References
@@ -67,7 +68,10 @@ src/
 │   ├── index.astro           # Daily dashboard / onboarding
 │   ├── calendar.astro        # Visual streak calendar
 │   ├── history.astro         # Past challenges
-│   └── settings.astro        # Manage challenge
+│   ├── settings.astro        # Manage challenge
+│   ├── friends.astro         # Social features / friend feed
+│   ├── login.astro           # Authentication
+│   └── register.astro        # Account creation
 ├── components/
 │   ├── Onboarding.astro      # Setup wizard
 │   ├── DailyView.astro       # Today's goals
@@ -77,13 +81,34 @@ src/
 │   └── Navigation.astro      # Bottom nav
 ├── scripts/
 │   ├── db.ts                 # IndexedDB wrapper
-│   ├── store.ts              # Data CRUD operations
+│   ├── store.ts              # Data CRUD operations (with caching)
 │   ├── challenge.ts          # Business logic
 │   ├── dates.ts              # Date utilities
 │   ├── types.ts              # TypeScript interfaces
-│   └── ui.ts                 # DOM helpers
+│   ├── ui.ts                 # DOM helpers + XSS escaping
+│   ├── api.ts                # Backend API client (with caching)
+│   ├── cache.ts              # TTL-based caching layer
+│   └── auth.ts               # Authentication helpers
 └── styles/
     └── global.css            # Design system
+
+functions/                    # Cloudflare Functions (API)
+├── _middleware.ts            # Auth, CORS, security headers
+├── utils.ts                  # Response helpers
+└── api/
+    ├── auth/
+    │   ├── register.ts       # POST /api/auth/register
+    │   ├── login.ts          # POST /api/auth/login
+    │   └── me.ts             # GET /api/auth/me
+    ├── sync/
+    │   ├── push.ts           # POST /api/sync/push (with validation)
+    │   └── pull.ts           # GET /api/sync/pull
+    ├── friends/
+    │   ├── index.ts          # GET/POST friends list
+    │   ├── requests.ts       # Friend requests
+    │   └── [code].ts         # Friend by code
+    └── feed/
+        └── index.ts          # GET /api/feed
 ```
 
 ## Data Model
@@ -174,8 +199,8 @@ Optional hardcore mode where missing any day resets the challenge to Day 0.
 - Mobile-first responsive design
 - Maximum 2 taps to complete daily check-in
 - Satisfying micro-animations on completion
-- No server calls - instant IndexedDB updates
-- Works offline
+- Instant IndexedDB updates with background cloud sync
+- Works offline (syncs when online)
 
 ## Frontend Design Skill
 
@@ -253,3 +278,88 @@ Before deploying, verify:
 - [ ] Export/Import works
 - [ ] Works on mobile Safari/Chrome
 - [ ] Works offline (after first load)
+
+## Security Measures (Implemented)
+
+### XSS Prevention
+- `escapeHTML()` and `escapeAttr()` functions in `src/scripts/ui.ts`
+- All user-generated content escaped before DOM insertion
+- Applied to: challenge names, goal names, notes, friend names, friend codes
+
+### CORS Policy
+- Origin validation in `functions/_middleware.ts`
+- Allowed origins: `https://habit-build.pages.dev`, `localhost:4321`, `localhost:8788`
+- No wildcard `*` CORS headers
+
+### Security Headers
+Applied via middleware to all responses:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `X-XSS-Protection: 1; mode=block`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Content-Security-Policy` (scripts, styles, fonts restricted)
+- `Strict-Transport-Security` (HSTS)
+- `Permissions-Policy` (restricts browser features)
+
+### Input Validation
+- Server-side validation on `/api/sync/push`:
+  - UUID format validation
+  - Date format validation (YYYY-MM-DD)
+  - Challenge field validation (name length, duration bounds, status enum, hex colors)
+  - Entry validation (boolean completed, note length limit)
+  - Goal ownership verification
+  - Request size limits (50 challenges, 500 entries max)
+
+### Performance Optimizations
+- TTL-based caching layer (`src/scripts/cache.ts`)
+- Cached data: challenges (5min), friends (15min), feed (10min), account (1hr)
+- Manual refresh button on friends page
+- Cache invalidation on data mutations
+
+## Security TODO (Remaining)
+
+- [ ] Add rate limiting (see implementation notes below)
+- [ ] Add token expiration (see implementation notes below)
+
+### Rate Limiting Implementation Notes
+
+Cloudflare provides rate limiting at the edge. Options:
+
+1. **Cloudflare Rate Limiting Rules** (Recommended for production)
+   - Configure in Cloudflare Dashboard > Security > WAF > Rate limiting rules
+   - Example: 100 requests per minute per IP for `/api/*`
+   - No code changes required
+
+2. **Custom Rate Limiting with KV**
+   ```typescript
+   // In _middleware.ts, use KV to track request counts
+   const key = `ratelimit:${clientIP}:${minute}`;
+   const count = await env.RATE_LIMIT_KV.get(key);
+   if (count && parseInt(count) > 100) {
+     return new Response('Too Many Requests', { status: 429 });
+   }
+   await env.RATE_LIMIT_KV.put(key, String((parseInt(count || '0') + 1)), { expirationTtl: 60 });
+   ```
+
+### Token Expiration Implementation Notes
+
+Requires schema change and middleware update:
+
+1. **Schema Migration**
+   ```sql
+   ALTER TABLE users ADD COLUMN token_created_at TEXT;
+   UPDATE users SET token_created_at = created_at;
+   ```
+
+2. **Middleware Check** (in `_middleware.ts`)
+   ```typescript
+   const tokenAge = Date.now() - new Date(user.token_created_at).getTime();
+   const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+   if (tokenAge > maxAge) {
+     return errorResponse('Token expired', 401, 'TOKEN_EXPIRED');
+   }
+   ```
+
+3. **Token Refresh Endpoint**
+   - Add `POST /api/auth/refresh` to issue new token
+   - Update `token_created_at` on refresh

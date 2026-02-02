@@ -36,6 +36,14 @@ export interface Challenge {
   status: ChallengeStatus;
   endDate?: string;       // when completed/failed
   failedOnDay?: number;   // if strict mode failed
+  // Sharing settings
+  visibleToFriends?: boolean;
+  shareGoals?: boolean;
+  shareStreak?: boolean;
+  shareDailyStatus?: boolean;
+  shareNotes?: boolean;
+  // Sync metadata
+  updatedAt?: string;
 }
 
 export interface DayEntry {
@@ -43,6 +51,8 @@ export interface DayEntry {
   goalId: string;
   completed: boolean;
   note?: string;
+  // Sync metadata
+  updatedAt?: string;
 }
 
 export interface AppState {

@@ -23,6 +23,74 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </section>
     
+    <!-- Sharing Settings Section -->
+    <section class="settings-section" id="sharing-section" hidden>
+      <h2 class="section-title">Share with Friends</h2>
+      
+      <div class="settings-card">
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-label">Share this Challenge</span>
+            <span class="setting-description">Let friends see your progress</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="visible-to-friends" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        
+        <div id="sharing-options" class="sharing-options" hidden>
+          <div class="setting-item setting-item--sub">
+            <div class="setting-info">
+              <span class="setting-label">Share goals</span>
+              <span class="setting-description">Show what habits you're tracking</span>
+            </div>
+            <label class="toggle toggle--sm">
+              <input type="checkbox" id="share-goals" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-item setting-item--sub">
+            <div class="setting-info">
+              <span class="setting-label">Share streak</span>
+              <span class="setting-description">Show your current streak count</span>
+            </div>
+            <label class="toggle toggle--sm">
+              <input type="checkbox" id="share-streak" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-item setting-item--sub">
+            <div class="setting-info">
+              <span class="setting-label">Share daily status</span>
+              <span class="setting-description">Show completed/incomplete status</span>
+            </div>
+            <label class="toggle toggle--sm">
+              <input type="checkbox" id="share-daily-status" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          
+          <div class="setting-item setting-item--sub">
+            <div class="setting-info">
+              <span class="setting-label">Share notes</span>
+              <span class="setting-description">Share your daily reflections</span>
+            </div>
+            <label class="toggle toggle--sm">
+              <input type="checkbox" id="share-notes" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      
+      <p class="sharing-hint">
+        You can add friends from the <a href="/friends">Friends</a> page
+      </p>
+    </section>
+    
     <!-- Data Management Section -->
     <section class="settings-section">
       <h2 class="section-title">Data Management</h2>
@@ -120,31 +188,86 @@ import Layout from '../layouts/Layout.astro';
     exportData, 
     importData, 
     clearAllData,
-    initStore 
+    initStore,
+    updateChallenge
   } from '../scripts/store';
+  import { getLocalAccount } from '../scripts/auth';
   import { getChallengeStats } from '../scripts/challenge';
   import { formatFullDate } from '../scripts/dates';
   
   const challengeCard = document.getElementById('challenge-card')!;
   const noChallengeCard = document.getElementById('no-challenge-card')!;
   const confirmModal = document.getElementById('confirm-modal')!;
+  const sharingSection = document.getElementById('sharing-section')!;
+  const sharingOptions = document.getElementById('sharing-options')!;
+  
+  // Sharing toggles
+  const visibleToFriendsToggle = document.getElementById('visible-to-friends') as HTMLInputElement;
+  const shareGoalsToggle = document.getElementById('share-goals') as HTMLInputElement;
+  const shareStreakToggle = document.getElementById('share-streak') as HTMLInputElement;
+  const shareDailyStatusToggle = document.getElementById('share-daily-status') as HTMLInputElement;
+  const shareNotesToggle = document.getElementById('share-notes') as HTMLInputElement;
   
   let currentConfirmAction: (() => void | Promise<void>) | null = null;
+  let currentChallengeData: any = null;
   
   // Initialize
   async function init() {
     await initStore();
     
     const challenge = await getCurrentChallenge();
+    const account = await getLocalAccount();
     
     if (challenge) {
+      currentChallengeData = challenge;
       await renderChallengeCard(challenge);
+      
+      // Show sharing section only if user has an account
+      if (account) {
+        sharingSection.hidden = false;
+        initSharingSettings(challenge);
+      }
     } else {
       challengeCard.style.display = 'none';
       noChallengeCard.hidden = false;
     }
     
     setupEventListeners();
+  }
+  
+  function initSharingSettings(challenge: any) {
+    // Set initial values
+    visibleToFriendsToggle.checked = challenge.visibleToFriends ?? false;
+    shareGoalsToggle.checked = challenge.shareGoals ?? true;
+    shareStreakToggle.checked = challenge.shareStreak ?? true;
+    shareDailyStatusToggle.checked = challenge.shareDailyStatus ?? true;
+    shareNotesToggle.checked = challenge.shareNotes ?? false;
+    
+    // Show/hide sub-options based on main toggle
+    sharingOptions.hidden = !visibleToFriendsToggle.checked;
+    
+    // Listen for changes
+    visibleToFriendsToggle.addEventListener('change', async () => {
+      sharingOptions.hidden = !visibleToFriendsToggle.checked;
+      await saveSharingSettings();
+    });
+    
+    shareGoalsToggle.addEventListener('change', saveSharingSettings);
+    shareStreakToggle.addEventListener('change', saveSharingSettings);
+    shareDailyStatusToggle.addEventListener('change', saveSharingSettings);
+    shareNotesToggle.addEventListener('change', saveSharingSettings);
+  }
+  
+  async function saveSharingSettings() {
+    if (!currentChallengeData) return;
+    
+    await updateChallenge(currentChallengeData.id, {
+      visibleToFriends: visibleToFriendsToggle.checked,
+      shareGoals: shareGoalsToggle.checked,
+      shareStreak: shareStreakToggle.checked,
+      shareDailyStatus: shareDailyStatusToggle.checked,
+      shareNotes: shareNotesToggle.checked,
+    });
   }
   
   init();
@@ -428,6 +551,103 @@ import Layout from '../layouts/Layout.astro';
   
   .setting-item--danger .setting-label {
     color: var(--accent-danger);
+  }
+  
+  .setting-item--sub {
+    padding-left: var(--space-4);
+    border-left: 2px solid var(--border-light);
+    margin-left: var(--space-2);
+  }
+  
+  /* Toggle Switch */
+  .toggle {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+  
+  .toggle--sm {
+    width: 44px;
+    height: 24px;
+  }
+  
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-secondary);
+    border: 2px solid var(--border);
+    transition: all var(--duration-fast) var(--ease-out);
+    border-radius: var(--radius-full);
+  }
+  
+  .toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: all var(--duration-fast) var(--ease-out);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .toggle--sm .toggle-slider::before {
+    height: 16px;
+    width: 16px;
+  }
+  
+  .toggle input:checked + .toggle-slider {
+    background-color: var(--accent-success);
+    border-color: var(--accent-success);
+  }
+  
+  .toggle input:checked + .toggle-slider::before {
+    transform: translateX(24px);
+  }
+  
+  .toggle--sm input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+  }
+  
+  .toggle input:focus + .toggle-slider {
+    box-shadow: 0 0 0 2px var(--accent-primary-light);
+  }
+  
+  /* Sharing Options */
+  .sharing-options {
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border-light);
+  }
+  
+  .sharing-hint {
+    margin-top: var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-align: center;
+  }
+  
+  .sharing-hint a {
+    color: var(--accent-primary);
+    text-decoration: none;
+  }
+  
+  .sharing-hint a:hover {
+    text-decoration: underline;
   }
   
   /* About */

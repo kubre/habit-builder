@@ -5,7 +5,7 @@ import Onboarding from '../components/Onboarding.astro';
 import DailyView from '../components/DailyView.astro';
 ---
 
-<Layout title="Habit Build - Daily Check-in" showNav={false}>
+<Layout title="Habit Build - Daily Check-in" showNav={true}>
   <div id="app-root">
     <!-- Content will be rendered client-side based on localStorage state -->
     <div id="loading-state" class="loading-state">
@@ -53,6 +53,9 @@ import DailyView from '../components/DailyView.astro';
   import { getCurrentChallenge, initStore, toggleEntry, getEntry, setEntry } from '../scripts/store';
   import { getTodayGoalsStatus, getChallengeStats, checkStrictModeViolation } from '../scripts/challenge';
   import { getToday } from '../scripts/dates';
+  import { syncOnOpen } from '../scripts/sync';
+  import { getLocalAccount } from '../scripts/auth';
+  import { escapeHTML, escapeAttr } from '../scripts/ui';
   
   // Initialize on page load
   document.addEventListener('DOMContentLoaded', () => {
@@ -66,6 +69,21 @@ import DailyView from '../components/DailyView.astro';
     try {
       // Initialize the database
       await initStore();
+      
+      // Sync with server if user has an account
+      const account = await getLocalAccount();
+      if (account) {
+        // Run sync in background (don't block app load)
+        syncOnOpen().then(result => {
+          if (result && !result.success) {
+            console.warn('Sync failed:', result.error);
+          } else if (result) {
+            console.log('Sync complete:', result);
+          }
+        }).catch(err => {
+          console.warn('Sync error:', err);
+        });
+      }
       
       const challenge = await getCurrentChallenge();
       
@@ -142,10 +160,10 @@ import DailyView from '../components/DailyView.astro';
         <header class="daily-header">
           <div class="daily-date">
             <span class="date-label">Today</span>
-            <h1 class="date-full">${formattedDate}</h1>
+            <h1 class="date-full">${escapeHTML(formattedDate)}</h1>
           </div>
           <div class="challenge-badge">
-            <span class="challenge-name">${challenge.name}</span>
+            <span class="challenge-name">${escapeHTML(challenge.name)}</span>
             ${challenge.strictMode ? `
               <span class="strict-badge" title="Strict Mode Active">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
@@ -237,18 +255,22 @@ import DailyView from '../components/DailyView.astro';
     `;
   }
   
-  function buildGoalCardHTML(status: any, index: number, dayNumber: number) {
+  function buildGoalCardHTML(status: any, index: number, _dayNumber: number) {
     const { goal, completed, note } = status;
+    const escapedName = escapeHTML(goal.name);
+    const escapedNote = escapeHTML(note);
+    const escapedId = escapeAttr(goal.id);
+    
     return `
       <div class="animate-slide-up delay-${index + 1}">
         <div 
           class="goal-card ${completed ? 'goal-card--completed' : ''}"
-          data-goal-id="${goal.id}"
+          data-goal-id="${escapedId}"
           data-completed="${completed ? 'true' : 'false'}"
         >
           <button 
-            class="goal-checkbox goal-${goal.color}"
-            aria-label="${completed ? `Unmark ${goal.name} as complete` : `Mark ${goal.name} as complete`}"
+            class="goal-checkbox goal-${escapeAttr(goal.color)}"
+            aria-label="${completed ? `Unmark ${escapedName} as complete` : `Mark ${escapedName} as complete`}"
             data-action="toggle"
           >
             <span class="checkbox-fill"></span>
@@ -258,8 +280,8 @@ import DailyView from '../components/DailyView.astro';
           </button>
           
           <div class="goal-content">
-            <span class="goal-name">${goal.name}</span>
-            ${note ? `<span class="goal-note-preview">${note}</span>` : ''}
+            <span class="goal-name">${escapedName}</span>
+            ${note ? `<span class="goal-note-preview">${escapedNote}</span>` : ''}
           </div>
           
           <button 
@@ -279,12 +301,16 @@ import DailyView from '../components/DailyView.astro';
   
   function buildNoteModalHTML(status: any) {
     const { goal, note } = status;
+    const escapedId = escapeAttr(goal.id);
+    const escapedName = escapeHTML(goal.name);
+    const escapedNote = escapeHTML(note);
+    
     return `
-      <div class="note-modal" data-modal-for="${goal.id}" hidden>
+      <div class="note-modal" data-modal-for="${escapedId}" hidden>
         <div class="note-modal-backdrop" data-action="close-modal"></div>
         <div class="note-modal-content">
           <div class="note-modal-header">
-            <h3 class="note-modal-title">Note for ${goal.name}</h3>
+            <h3 class="note-modal-title">Note for ${escapedName}</h3>
             <button class="note-modal-close" data-action="close-modal" aria-label="Close">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -296,7 +322,7 @@ import DailyView from '../components/DailyView.astro';
             class="note-textarea input"
             placeholder="How did it go today? Any reflections..."
             maxlength="500"
-          >${note || ''}</textarea>
+          >${escapedNote}</textarea>
           <div class="note-modal-actions">
             <button class="btn btn-primary btn-full" data-action="save-note">
               Save Note

@@ -9,6 +9,12 @@ import type {
   Goal 
 } from './types';
 import * as db from './db';
+import { 
+  withCache, 
+  invalidateUserDataCache, 
+  CACHE_TTL,
+  invalidateCache 
+} from './cache';
 
 /**
  * Generate a unique ID using native crypto.randomUUID()
@@ -27,12 +33,18 @@ export function generateId(): string {
 // ============================================
 
 /**
- * Get the current active challenge
+ * Get the current active challenge (cached)
  */
 export async function getCurrentChallenge(): Promise<Challenge | null> {
-  const currentId = await db.getSetting<string>('currentChallengeId');
-  if (!currentId) return null;
-  return db.getChallenge(currentId);
+  return withCache(
+    'currentChallenge',
+    CACHE_TTL.currentChallenge,
+    async () => {
+      const currentId = await db.getSetting<string>('currentChallengeId');
+      if (!currentId) return null;
+      return db.getChallenge(currentId);
+    }
+  );
 }
 
 /**
@@ -44,18 +56,23 @@ export async function createChallenge(
   duration: number,
   strictMode: boolean
 ): Promise<Challenge> {
+  const now = new Date().toISOString();
   const challenge: Challenge = {
     id: generateId(),
     name,
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: now.split('T')[0],
     duration,
     strictMode,
     goals: goals.map(g => ({ ...g, id: generateId() })),
-    status: 'active'
+    status: 'active',
+    updatedAt: now
   };
   
   await db.saveChallenge(challenge);
   await db.setSetting('currentChallengeId', challenge.id);
+  
+  // Invalidate cache since data changed
+  invalidateUserDataCache();
   
   return challenge;
 }
@@ -70,8 +87,15 @@ export async function updateChallenge(
   const challenge = await db.getChallenge(challengeId);
   if (!challenge) return null;
   
-  const updated = { ...challenge, ...updates };
+  const updated = { 
+    ...challenge, 
+    ...updates,
+    updatedAt: new Date().toISOString()
+  };
   await db.saveChallenge(updated);
+  
+  // Invalidate cache since data changed
+  invalidateUserDataCache();
   
   return updated;
 }
@@ -87,8 +111,10 @@ export async function endChallenge(
   const challenge = await db.getChallenge(challengeId);
   if (!challenge) return;
   
+  const now = new Date().toISOString();
   challenge.status = status;
-  challenge.endDate = new Date().toISOString().split('T')[0];
+  challenge.endDate = now.split('T')[0];
+  challenge.updatedAt = now;
   
   if (failedOnDay !== undefined) {
     challenge.failedOnDay = failedOnDay;
@@ -101,14 +127,24 @@ export async function endChallenge(
   if (currentId === challengeId) {
     await db.setSetting('currentChallengeId', null);
   }
+  
+  // Invalidate cache since data changed
+  invalidateUserDataCache();
 }
 
 /**
- * Get all past (non-active) challenges
+ * Get all past (non-active) challenges (cached)
  */
 export async function getPastChallenges(): Promise<Challenge[]> {
-  const challenges = await db.getAllChallenges();
-  return challenges.filter(c => c.status !== 'active');
+  return withCache(
+    'challenges',
+    CACHE_TTL.challenges,
+    async () => {
+      const challenges = await db.getAllChallenges();
+      return challenges.filter(c => c.status !== 'active');
+    },
+    'past'
+  );
 }
 
 // ============================================
@@ -116,16 +152,23 @@ export async function getPastChallenges(): Promise<Challenge[]> {
 // ============================================
 
 /**
- * Get all entries for a specific challenge
+ * Get all entries for a specific challenge (cached)
  */
 export async function getChallengeEntries(challengeId: string): Promise<DayEntry[]> {
-  const challenge = await db.getChallenge(challengeId);
-  if (!challenge) return [];
-  
-  const goalIds = new Set(challenge.goals.map(g => g.id));
-  const allEntries = await db.getAllEntries();
-  
-  return allEntries.filter(e => goalIds.has(e.goalId));
+  return withCache(
+    'entries',
+    CACHE_TTL.entries,
+    async () => {
+      const challenge = await db.getChallenge(challengeId);
+      if (!challenge) return [];
+      
+      const goalIds = new Set(challenge.goals.map(g => g.id));
+      const allEntries = await db.getAllEntries();
+      
+      return allEntries.filter(e => goalIds.has(e.goalId));
+    },
+    challengeId
+  );
 }
 
 /**
@@ -155,10 +198,16 @@ export async function setEntry(
     date,
     goalId,
     completed,
-    note
+    note,
+    updatedAt: new Date().toISOString()
   };
   
   await db.saveEntry(entry);
+  
+  // Invalidate entries cache for this challenge
+  invalidateCache('entries');
+  invalidateCache('currentChallenge');
+  
   return entry;
 }
 
@@ -221,6 +270,7 @@ export async function importData(json: string): Promise<boolean> {
  */
 export async function clearAllData(): Promise<void> {
   await db.clearAllData();
+  invalidateUserDataCache();
 }
 
 /**

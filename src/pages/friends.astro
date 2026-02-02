@@ -1,0 +1,1108 @@
+---
+// Friends Page - View friends, requests, and activity feed
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Friends - Habit Build">
+  <div class="friends-page container">
+    <!-- Not Connected State -->
+    <div id="not-connected" class="not-connected-state" hidden>
+      <div class="connect-card">
+        <div class="connect-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+        </div>
+        <h1 class="connect-title">Connect with Friends</h1>
+        <p class="connect-description">
+          Create an account to share your progress with friends and see their journey too.
+        </p>
+        
+        <div class="connect-form">
+          <div class="input-group">
+            <label class="input-label" for="user-name">Your Name</label>
+            <input 
+              type="text" 
+              id="user-name" 
+              class="input"
+              placeholder="Enter your name"
+              maxlength="50"
+            />
+          </div>
+          <button class="btn btn-primary btn-lg btn-full" id="create-account-btn" disabled>
+            Create Account
+          </button>
+        </div>
+        
+        <div class="connect-divider">
+          <span>or</span>
+        </div>
+        
+        <button class="btn btn-secondary btn-full" id="recover-account-btn">
+          Recover Existing Account
+        </button>
+      </div>
+    </div>
+    
+    <!-- Recovery Modal -->
+    <div id="recovery-modal" class="modal" hidden>
+      <div class="modal-backdrop" data-action="close-recovery"></div>
+      <div class="modal-content">
+        <h2 class="modal-title">Recover Your Account</h2>
+        <p class="modal-description">
+          Enter your 12-word recovery phrase to restore your account.
+        </p>
+        <div class="recovery-input">
+          <textarea 
+            id="recovery-phrase-input" 
+            class="input recovery-textarea"
+            placeholder="Enter your 12 words separated by spaces..."
+            rows="4"
+          ></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" data-action="close-recovery">Cancel</button>
+          <button class="btn btn-primary" id="submit-recovery-btn">Recover</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Account Created Modal (shows recovery phrase) -->
+    <div id="account-created-modal" class="modal" hidden>
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-icon modal-icon--success">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h2 class="modal-title">Account Created!</h2>
+        
+        <div class="friend-code-display">
+          <span class="friend-code-label">Your Friend Code</span>
+          <div class="friend-code-value" id="new-friend-code">HABIT-XXXX</div>
+          <button class="btn btn-ghost btn-sm" id="copy-new-code-btn">Copy</button>
+        </div>
+        
+        <div class="recovery-phrase-warning">
+          <div class="warning-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+          </div>
+          <h3>Save Your Recovery Phrase</h3>
+          <p>Write these 12 words down and keep them safe. You'll need them to recover your account on a new device.</p>
+          <div class="recovery-phrase-display" id="recovery-phrase-display">
+            <!-- Words will be inserted here -->
+          </div>
+        </div>
+        
+        <button class="btn btn-primary btn-lg btn-full" id="phrase-saved-btn">
+          I've Saved My Phrase
+        </button>
+      </div>
+    </div>
+    
+    <!-- Connected State -->
+    <div id="connected" hidden>
+      <header class="page-header">
+        <h1 class="page-title">Friends</h1>
+        <div class="header-actions">
+          <button class="btn btn-ghost btn-sm btn-icon" id="refresh-btn" title="Refresh">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M23 4v6h-6"></path>
+              <path d="M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+          <button class="btn btn-primary btn-sm" id="add-friend-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add
+          </button>
+        </div>
+      </header>
+      
+      <!-- Friend Requests Section -->
+      <section class="requests-section" id="requests-section" hidden>
+        <h2 class="section-title">
+          Friend Requests
+          <span class="badge" id="requests-count">0</span>
+        </h2>
+        <div class="requests-list" id="requests-list">
+          <!-- Requests will be rendered here -->
+        </div>
+      </section>
+      
+      <!-- My Friends Section -->
+      <section class="friends-section" id="friends-section">
+        <h2 class="section-title">My Friends</h2>
+        <div class="friends-list" id="friends-list">
+          <!-- Friends will be rendered here -->
+        </div>
+        <div class="empty-friends" id="empty-friends" hidden>
+          <p>No friends yet. Share your code or add friends!</p>
+        </div>
+      </section>
+      
+      <!-- Activity Feed Section -->
+      <section class="feed-section">
+        <h2 class="section-title">Today's Activity</h2>
+        <div class="feed-list" id="feed-list">
+          <!-- Feed items will be rendered here -->
+        </div>
+        <div class="empty-feed" id="empty-feed" hidden>
+          <p>No activity yet. Add friends to see their progress!</p>
+        </div>
+      </section>
+      
+      <!-- Your Friend Code -->
+      <div class="your-code-card">
+        <span class="your-code-label">Your Friend Code</span>
+        <div class="your-code-value" id="your-friend-code">HABIT-XXXX</div>
+        <button class="btn btn-ghost btn-sm" id="copy-code-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          Copy
+        </button>
+      </div>
+    </div>
+    
+    <!-- Add Friend Modal -->
+    <div id="add-friend-modal" class="modal" hidden>
+      <div class="modal-backdrop" data-action="close-add-friend"></div>
+      <div class="modal-content">
+        <h2 class="modal-title">Add Friend</h2>
+        <p class="modal-description">
+          Enter your friend's code to send them a request.
+        </p>
+        <div class="input-group">
+          <input 
+            type="text" 
+            id="friend-code-input" 
+            class="input friend-code-input"
+            placeholder="HABIT-XXXX"
+            maxlength="10"
+          />
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" data-action="close-add-friend">Cancel</button>
+          <button class="btn btn-primary" id="send-request-btn">Send Request</button>
+        </div>
+        <div class="modal-message" id="add-friend-message" hidden></div>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { initStore } from '../scripts/store';
+  import { 
+    getLocalAccount, 
+    createAccountFromRegistration,
+    updateAccountFromRecovery,
+    markRecoveryPhraseShown,
+  } from '../scripts/auth';
+  import * as api from '../scripts/api';
+  import { syncOnOpen } from '../scripts/sync';
+  import { escapeHTML, escapeAttr } from '../scripts/ui';
+  
+  // State
+  let currentAccount: Awaited<ReturnType<typeof getLocalAccount>> = null;
+  
+  // Elements
+  const notConnectedEl = document.getElementById('not-connected')!;
+  const connectedEl = document.getElementById('connected')!;
+  const userNameInput = document.getElementById('user-name') as HTMLInputElement;
+  const createAccountBtn = document.getElementById('create-account-btn')!;
+  const recoverAccountBtn = document.getElementById('recover-account-btn')!;
+  const recoveryModal = document.getElementById('recovery-modal')!;
+  const recoveryPhraseInput = document.getElementById('recovery-phrase-input') as HTMLTextAreaElement;
+  const submitRecoveryBtn = document.getElementById('submit-recovery-btn')!;
+  const accountCreatedModal = document.getElementById('account-created-modal')!;
+  const addFriendModal = document.getElementById('add-friend-modal')!;
+  const friendCodeInput = document.getElementById('friend-code-input') as HTMLInputElement;
+  
+  // Initialize
+  async function init() {
+    await initStore();
+    currentAccount = await getLocalAccount();
+    
+    if (currentAccount) {
+      await showConnectedState();
+    } else {
+      showNotConnectedState();
+    }
+  }
+  
+  function showNotConnectedState() {
+    notConnectedEl.hidden = false;
+    connectedEl.hidden = true;
+  }
+  
+  async function showConnectedState() {
+    // Remove the not-connected section entirely from DOM
+    notConnectedEl.remove();
+    connectedEl.hidden = false;
+    
+    // Show friend code
+    document.getElementById('your-friend-code')!.textContent = currentAccount!.friendCode;
+    
+    // Sync on open
+    await syncOnOpen();
+    
+    // Load data
+    await loadFriendRequests();
+    await loadFriendsList();
+    await loadFeed();
+  }
+  
+  // Refresh button handler
+  let isRefreshing = false;
+  document.getElementById('refresh-btn')?.addEventListener('click', async () => {
+    if (isRefreshing) return;
+    
+    const refreshBtn = document.getElementById('refresh-btn')!;
+    isRefreshing = true;
+    refreshBtn.classList.add('refreshing');
+    
+    try {
+      // Force refresh all data
+      await Promise.all([
+        loadFriendRequests(true),
+        loadFriendsList(true),
+        loadFeed(true)
+      ]);
+    } finally {
+      isRefreshing = false;
+      refreshBtn.classList.remove('refreshing');
+    }
+  });
+  
+  // Account creation
+  userNameInput.addEventListener('input', () => {
+    createAccountBtn.toggleAttribute('disabled', userNameInput.value.trim().length < 1);
+  });
+  
+  createAccountBtn.addEventListener('click', async () => {
+    const name = userNameInput.value.trim();
+    if (!name) return;
+    
+    createAccountBtn.textContent = 'Creating...';
+    createAccountBtn.setAttribute('disabled', '');
+    
+    const result = await api.register(name);
+    
+    if (result.error) {
+      alert('Failed to create account: ' + result.error);
+      createAccountBtn.textContent = 'Create Account';
+      createAccountBtn.removeAttribute('disabled');
+      return;
+    }
+    
+    // Save account locally
+    currentAccount = await createAccountFromRegistration(
+      result.data!.user,
+      result.data!.authToken
+    );
+    
+    // Show recovery phrase modal
+    document.getElementById('new-friend-code')!.textContent = result.data!.user.friendCode;
+    
+    const phraseDisplay = document.getElementById('recovery-phrase-display')!;
+    phraseDisplay.innerHTML = result.data!.recoveryPhrase
+      .map((word, i) => `<span class="recovery-word"><span class="word-num">${i + 1}</span>${word}</span>`)
+      .join('');
+    
+    accountCreatedModal.hidden = false;
+  });
+  
+  // Recovery phrase saved
+  document.getElementById('phrase-saved-btn')?.addEventListener('click', async () => {
+    await markRecoveryPhraseShown();
+    accountCreatedModal.hidden = true;
+    await showConnectedState();
+  });
+  
+  // Account recovery
+  recoverAccountBtn.addEventListener('click', () => {
+    recoveryModal.hidden = false;
+    recoveryPhraseInput.focus();
+  });
+  
+  submitRecoveryBtn.addEventListener('click', async () => {
+    const phrase = recoveryPhraseInput.value.trim().toLowerCase().split(/\s+/);
+    
+    if (phrase.length !== 12) {
+      alert('Please enter exactly 12 words');
+      return;
+    }
+    
+    submitRecoveryBtn.textContent = 'Recovering...';
+    submitRecoveryBtn.setAttribute('disabled', '');
+    
+    const result = await api.recover(phrase);
+    
+    if (result.error) {
+      alert('Failed to recover account: ' + result.error);
+      submitRecoveryBtn.textContent = 'Recover';
+      submitRecoveryBtn.removeAttribute('disabled');
+      return;
+    }
+    
+    // Save account locally
+    currentAccount = await updateAccountFromRecovery(
+      result.data!.user,
+      result.data!.authToken
+    );
+    
+    recoveryModal.hidden = true;
+    await showConnectedState();
+  });
+  
+  // Close modals
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    
+    if (target.closest('[data-action="close-recovery"]')) {
+      recoveryModal.hidden = true;
+    }
+    if (target.closest('[data-action="close-add-friend"]')) {
+      addFriendModal.hidden = true;
+    }
+  });
+  
+  // Add friend
+  document.getElementById('add-friend-btn')?.addEventListener('click', () => {
+    addFriendModal.hidden = false;
+    friendCodeInput.value = '';
+    friendCodeInput.focus();
+    document.getElementById('add-friend-message')!.hidden = true;
+  });
+  
+  document.getElementById('send-request-btn')?.addEventListener('click', async () => {
+    const code = friendCodeInput.value.trim().toUpperCase();
+    if (!code) return;
+    
+    const messageEl = document.getElementById('add-friend-message')!;
+    const sendBtn = document.getElementById('send-request-btn')!;
+    
+    sendBtn.textContent = 'Sending...';
+    sendBtn.setAttribute('disabled', '');
+    
+    const result = await api.sendFriendRequest(code);
+    
+    sendBtn.textContent = 'Send Request';
+    sendBtn.removeAttribute('disabled');
+    
+    if (result.error) {
+      messageEl.textContent = result.error;
+      messageEl.className = 'modal-message modal-message--error';
+      messageEl.hidden = false;
+      return;
+    }
+    
+    messageEl.textContent = result.data?.message || 'Request sent!';
+    messageEl.className = 'modal-message modal-message--success';
+    messageEl.hidden = false;
+    
+    setTimeout(() => {
+      addFriendModal.hidden = true;
+    }, 1500);
+  });
+  
+  // Copy friend code
+  document.getElementById('copy-code-btn')?.addEventListener('click', async () => {
+    if (currentAccount?.friendCode) {
+      await navigator.clipboard.writeText(currentAccount.friendCode);
+      const btn = document.getElementById('copy-code-btn')!;
+      btn.textContent = 'Copied!';
+      setTimeout(() => {
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg> Copy`;
+      }, 2000);
+    }
+  });
+  
+  document.getElementById('copy-new-code-btn')?.addEventListener('click', async () => {
+    const code = document.getElementById('new-friend-code')!.textContent;
+    if (code) {
+      await navigator.clipboard.writeText(code);
+      const btn = document.getElementById('copy-new-code-btn')!;
+      btn.textContent = 'Copied!';
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+      }, 2000);
+    }
+  });
+  
+  // Load friend requests
+  async function loadFriendRequests(forceRefresh = false) {
+    const result = await api.getFriendRequests(forceRefresh);
+    const section = document.getElementById('requests-section')!;
+    const list = document.getElementById('requests-list')!;
+    const countEl = document.getElementById('requests-count')!;
+    
+    if (result.error || !result.data?.requests.length) {
+      section.hidden = true;
+      return;
+    }
+    
+    const requests = result.data.requests;
+    countEl.textContent = String(requests.length);
+    section.hidden = false;
+    
+    list.innerHTML = requests.map(req => `
+      <div class="request-card" data-id="${escapeAttr(req.id)}">
+        <div class="request-info">
+          <span class="request-name">${escapeHTML(req.from.name)}</span>
+          <span class="request-code">${escapeHTML(req.from.friendCode)}</span>
+        </div>
+        <div class="request-actions">
+          <button class="btn btn-primary btn-sm" data-action="accept" data-id="${escapeAttr(req.id)}">Accept</button>
+          <button class="btn btn-ghost btn-sm" data-action="deny" data-id="${escapeAttr(req.id)}">Deny</button>
+        </div>
+      </div>
+    `).join('');
+    
+    // Handle accept/deny
+    list.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+      const action = target.dataset.action as 'accept' | 'deny' | undefined;
+      const id = target.dataset.id;
+      
+      if (!action || !id) return;
+      
+      const result = await api.respondToFriendRequest(id, action);
+      
+      if (result.error) {
+        alert('Failed: ' + result.error);
+        return;
+      }
+      
+      // Remove the card
+      const card = document.querySelector(`[data-id="${id}"].request-card`);
+      card?.remove();
+      
+      // Update count
+      const remaining = list.querySelectorAll('.request-card').length;
+      countEl.textContent = String(remaining);
+      if (remaining === 0) section.hidden = true;
+      
+      // Reload feed if accepted
+      if (action === 'accept') {
+        await loadFriendsList();
+        await loadFeed();
+      }
+    });
+  }
+  
+  // Load friends list
+  async function loadFriendsList(forceRefresh = false) {
+    const result = await api.getFriends(forceRefresh);
+    const list = document.getElementById('friends-list')!;
+    const empty = document.getElementById('empty-friends')!;
+    
+    if (result.error || !result.data?.friends.length) {
+      list.innerHTML = '';
+      empty.hidden = false;
+      return;
+    }
+    
+    empty.hidden = true;
+    const friends = result.data.friends;
+    
+    list.innerHTML = friends.map(friend => `
+      <div class="friend-card" data-friendship-id="${escapeAttr(friend.friendshipId)}">
+        <div class="friend-info">
+          <span class="friend-name">${escapeHTML(friend.name)}</span>
+          <span class="friend-code">${escapeHTML(friend.friendCode)}</span>
+        </div>
+        <button class="btn btn-ghost btn-sm friend-remove-btn" data-friendship-id="${escapeAttr(friend.friendshipId)}">
+          Unfriend
+        </button>
+      </div>
+    `).join('');
+    
+    // Handle remove friend
+    list.querySelectorAll('.friend-remove-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const friendshipId = target.dataset.friendshipId!;
+        
+        if (!confirm('Remove this friend?')) return;
+        
+        const result = await api.removeFriend(friendshipId);
+        
+        if (result.error) {
+          alert('Failed to remove friend: ' + result.error);
+          return;
+        }
+        
+        // Remove the card
+        const card = document.querySelector(`[data-friendship-id="${friendshipId}"].friend-card`);
+        card?.remove();
+        
+        // Check if list is empty
+        if (list.querySelectorAll('.friend-card').length === 0) {
+          empty.hidden = false;
+        }
+        
+        // Reload feed
+        await loadFeed();
+      });
+    });
+  }
+  
+  // Load activity feed
+  async function loadFeed(forceRefresh = false) {
+    const result = await api.getFeed(20, 0, forceRefresh);
+    const list = document.getElementById('feed-list')!;
+    const empty = document.getElementById('empty-feed')!;
+    
+    if (result.error || !result.data?.items.length) {
+      list.innerHTML = '';
+      empty.hidden = false;
+      return;
+    }
+    
+    empty.hidden = true;
+    const items = result.data.items;
+    
+    list.innerHTML = items.map(item => {
+      const isComplete = item.completedGoals === item.totalGoals;
+      const progressPercent = Math.min(100, Math.max(0, (item.completedGoals / item.totalGoals) * 100));
+      return `
+        <div class="feed-card ${isComplete ? 'feed-card--complete' : ''}">
+          <div class="feed-header">
+            <span class="feed-name">${escapeHTML(item.friend.name)}</span>
+            <span class="feed-day">Day ${Number(item.challenge.currentDay)}</span>
+          </div>
+          <div class="feed-challenge">${escapeHTML(item.challenge.name)}</div>
+          <div class="feed-progress">
+            <div class="feed-progress-bar">
+              <div class="feed-progress-fill" style="width: ${progressPercent}%"></div>
+            </div>
+            <span class="feed-progress-text">${Number(item.completedGoals)}/${Number(item.totalGoals)} goals</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  // Initialize on load
+  init();
+</script>
+
+<style>
+  .friends-page {
+    padding: var(--space-5) var(--space-4);
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+    min-height: calc(100vh - 100px);
+    min-height: calc(100dvh - 100px);
+    overflow-x: hidden;
+  }
+  
+  /* Not Connected State */
+  .not-connected-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 200px);
+  }
+  
+  .connect-card {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .connect-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto var(--space-4);
+    color: var(--accent-primary);
+  }
+  
+  .connect-icon svg {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .connect-title {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-2);
+  }
+  
+  .connect-description {
+    color: var(--text-secondary);
+    margin-bottom: var(--space-6);
+  }
+  
+  .connect-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  
+  .connect-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: var(--space-5) 0;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+  
+  .connect-divider::before,
+  .connect-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-color: var(--border);
+  }
+  
+  /* Page Header */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-6);
+  }
+  
+  .page-title {
+    font-size: var(--text-2xl);
+  }
+  
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  
+  .btn-icon {
+    padding: var(--space-2);
+  }
+  
+  .btn-icon svg {
+    transition: transform var(--duration-normal) var(--ease-out);
+  }
+  
+  /* Refresh button spinning animation */
+  .refreshing svg {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  
+  /* Section Title */
+  .section-title {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  
+  .badge {
+    background-color: var(--accent-primary);
+    color: white;
+    font-size: var(--text-xs);
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+  }
+  
+  /* Requests Section */
+  .requests-section {
+    margin-bottom: var(--space-6);
+  }
+  
+  .requests-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  
+  .request-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4);
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  
+  .request-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  
+  .request-name {
+    font-weight: var(--font-medium);
+  }
+  
+  .request-code {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .request-actions {
+    display: flex;
+    gap: var(--space-2);
+  }
+  
+  /* Friends Section */
+  .friends-section {
+    margin-bottom: var(--space-6);
+  }
+  
+  .friends-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  
+  .friend-card {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    gap: var(--space-3);
+  }
+  
+  .friend-info {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .friend-name {
+    font-weight: var(--font-medium);
+  }
+  
+  .friend-code {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .friend-remove-btn {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  
+  .friend-remove-btn:hover {
+    color: var(--accent-danger);
+  }
+  
+  .empty-friends {
+    text-align: center;
+    padding: var(--space-6);
+    color: var(--text-muted);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+  }
+  
+  /* Feed Section */
+  .feed-section {
+    margin-bottom: var(--space-6);
+  }
+  
+  .feed-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  
+  .feed-card {
+    padding: var(--space-4);
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+  
+  .feed-card--complete {
+    background-color: var(--accent-success-light);
+  }
+  
+  .feed-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-2);
+  }
+  
+  .feed-name {
+    font-weight: var(--font-semibold);
+  }
+  
+  .feed-day {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    font-family: var(--font-display);
+  }
+  
+  .feed-challenge {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
+  }
+  
+  .feed-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  
+  .feed-progress-bar {
+    flex: 1;
+    height: 6px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+  
+  .feed-progress-fill {
+    height: 100%;
+    background-color: var(--accent-success);
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+  }
+  
+  .feed-progress-text {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  
+  .empty-feed {
+    text-align: center;
+    padding: var(--space-8);
+    color: var(--text-muted);
+  }
+  
+  /* Your Code Card */
+  .your-code-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    margin-top: var(--space-6);
+  }
+  
+  .your-code-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .your-code-value {
+    flex: 1;
+    font-family: var(--font-display);
+    font-weight: var(--font-semibold);
+    font-size: var(--text-lg);
+    color: var(--accent-primary);
+  }
+  
+  /* Modal Styles */
+  .modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+  }
+  
+  .modal[hidden] {
+    display: none;
+  }
+  
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(45, 42, 38, 0.6);
+  }
+  
+  .modal-content {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  .modal-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto var(--space-4);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .modal-icon--success {
+    background-color: var(--accent-success-light);
+    color: var(--accent-success);
+  }
+  
+  .modal-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .modal-title {
+    font-size: var(--text-xl);
+    text-align: center;
+    margin-bottom: var(--space-2);
+  }
+  
+  .modal-description {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-5);
+  }
+  
+  .modal-actions {
+    display: flex;
+    gap: var(--space-3);
+    justify-content: flex-end;
+    margin-top: var(--space-5);
+  }
+  
+  .modal-message {
+    margin-top: var(--space-4);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    text-align: center;
+    font-size: var(--text-sm);
+  }
+  
+  .modal-message--success {
+    background-color: var(--accent-success-light);
+    color: var(--accent-success);
+  }
+  
+  .modal-message--error {
+    background-color: var(--accent-danger-light);
+    color: var(--accent-danger);
+  }
+  
+  /* Friend Code Input */
+  .friend-code-input {
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  
+  /* Recovery Phrase */
+  .recovery-textarea {
+    font-family: var(--font-body);
+    resize: none;
+  }
+  
+  .friend-code-display {
+    text-align: center;
+    margin-bottom: var(--space-6);
+  }
+  
+  .friend-code-label {
+    display: block;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-bottom: var(--space-2);
+  }
+  
+  .friend-code-value {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    font-weight: var(--font-bold);
+    color: var(--accent-primary);
+    margin-bottom: var(--space-2);
+  }
+  
+  .recovery-phrase-warning {
+    background-color: var(--accent-warning-light);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    margin-bottom: var(--space-5);
+  }
+  
+  .recovery-phrase-warning .warning-icon {
+    width: 32px;
+    height: 32px;
+    color: var(--accent-warning);
+    margin-bottom: var(--space-2);
+  }
+  
+  .recovery-phrase-warning h3 {
+    font-size: var(--text-base);
+    margin-bottom: var(--space-2);
+  }
+  
+  .recovery-phrase-warning p {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
+  }
+  
+  .recovery-phrase-display {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-2);
+  }
+  
+  .recovery-word {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    background-color: white;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+  }
+  
+  .word-num {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    min-width: 16px;
+  }
+</style>

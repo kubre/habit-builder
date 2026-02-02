@@ -3,6 +3,42 @@
 // ============================================
 
 /**
+ * HTML entity map for escaping
+ */
+const HTML_ENTITIES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#x27;',
+  '/': '&#x2F;',
+  '`': '&#x60;',
+  '=': '&#x3D;',
+};
+
+/**
+ * Escape HTML to prevent XSS attacks
+ * Use this whenever rendering user-controlled data into HTML
+ */
+export function escapeHTML(str: string | null | undefined): string {
+  if (str == null) return '';
+  return String(str).replace(/[&<>"'`=/]/g, (char) => HTML_ENTITIES[char] || char);
+}
+
+/**
+ * Escape HTML for use in attributes (stricter escaping)
+ */
+export function escapeAttr(str: string | null | undefined): string {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
  * Select a single element
  */
 export function $(selector: string, parent: ParentNode = document): Element | null {

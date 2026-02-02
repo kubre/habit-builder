@@ -78,6 +78,7 @@ import Layout from '../layouts/Layout.astro';
   import { getCurrentChallenge, getChallengeEntries, initStore } from '../scripts/store';
   import { getDayStatuses } from '../scripts/challenge';
   import { formatFullDate } from '../scripts/dates';
+  import { escapeHTML } from '../scripts/ui';
   
   // Initialize and render
   async function init() {
@@ -183,10 +184,13 @@ import Layout from '../layouts/Layout.astro';
       const entry = dayEntries.find(e => e.goalId === goal.id);
       const completed = entry?.completed ?? false;
       const note = entry?.note;
+      const escapedName = escapeHTML(goal.name);
+      const escapedNote = escapeHTML(note);
+      const escapedColor = escapeHTML(goal.color);
       
       return `
         <div class="modal-goal ${completed ? 'modal-goal--completed' : ''}">
-          <div class="modal-goal-status goal-${goal.color}">
+          <div class="modal-goal-status goal-${escapedColor}">
             ${completed ? `
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -194,8 +198,8 @@ import Layout from '../layouts/Layout.astro';
             ` : ''}
           </div>
           <div class="modal-goal-info">
-            <span class="modal-goal-name">${goal.name}</span>
-            ${note ? `<span class="modal-goal-note">${note}</span>` : ''}
+            <span class="modal-goal-name">${escapedName}</span>
+            ${note ? `<span class="modal-goal-note">${escapedNote}</span>` : ''}
           </div>
         </div>
       `;
@@ -223,11 +227,13 @@ import Layout from '../layouts/Layout.astro';
   .calendar-page {
     padding: var(--space-5) var(--space-4);
     padding-bottom: calc(100px + env(safe-area-inset-bottom));
+    max-width: 500px;
+    margin: 0 auto;
   }
   
   .page-header {
     text-align: center;
-    margin-bottom: var(--space-6);
+    margin-bottom: var(--space-5);
   }
   
   .page-title {
@@ -240,12 +246,17 @@ import Layout from '../layouts/Layout.astro';
     font-size: var(--text-sm);
   }
   
+  /* Legend Card */
   .calendar-legend {
     display: flex;
     justify-content: center;
-    gap: var(--space-4);
-    margin-bottom: var(--space-5);
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
     flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
   }
   
   .legend-item {
@@ -255,8 +266,8 @@ import Layout from '../layouts/Layout.astro';
   }
   
   .legend-dot {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border-radius: var(--radius-full);
   }
   
@@ -281,10 +292,15 @@ import Layout from '../layouts/Layout.astro';
     color: var(--text-muted);
   }
   
+  /* Calendar Container */
   .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: var(--space-2);
+    gap: 6px;
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-card);
   }
   
   .calendar-header {
@@ -292,7 +308,9 @@ import Layout from '../layouts/Layout.astro';
     font-size: var(--text-xs);
     font-weight: var(--font-semibold);
     color: var(--text-muted);
-    padding: var(--space-2);
+    padding: var(--space-2) 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
   
   .calendar-cell {
@@ -304,15 +322,22 @@ import Layout from '../layouts/Layout.astro';
     gap: 2px;
     border-radius: var(--radius-md);
     border: none;
-    background-color: var(--bg-card);
+    background-color: var(--bg-secondary);
     cursor: pointer;
     transition: all var(--duration-fast) var(--ease-out);
-    padding: var(--space-1);
+    padding: 4px;
+    min-width: 0;
+    font-size: 0;
   }
   
   .calendar-cell:hover:not(.calendar-cell--empty):not(.calendar-cell--future) {
-    transform: scale(1.05);
+    transform: scale(1.08);
     box-shadow: var(--shadow-md);
+    z-index: 1;
+  }
+  
+  .calendar-cell:active:not(.calendar-cell--empty):not(.calendar-cell--future) {
+    transform: scale(0.95);
   }
   
   .calendar-cell--empty {
@@ -321,43 +346,54 @@ import Layout from '../layouts/Layout.astro';
   }
   
   .calendar-cell--future {
-    background-color: var(--bg-secondary);
+    background-color: var(--bg-tertiary);
     cursor: default;
+    opacity: 0.6;
   }
   
   .calendar-cell--today {
-    border: 2px solid var(--accent-primary);
+    box-shadow: inset 0 0 0 2px var(--accent-primary);
   }
   
   .calendar-cell--complete {
-    background-color: var(--accent-success-light);
+    background: linear-gradient(135deg, var(--accent-success-light), #d4e8d3);
   }
   
   .calendar-cell--partial {
-    background-color: var(--accent-warning-light);
+    background: linear-gradient(135deg, var(--accent-warning-light), #f5e6c8);
   }
   
   .calendar-cell--missed {
-    background-color: var(--accent-danger-light);
+    background: linear-gradient(135deg, var(--accent-danger-light), #f5d5d1);
   }
   
   .cell-day {
     font-family: var(--font-display);
-    font-size: var(--text-sm);
+    font-size: clamp(10px, 3vw, 14px);
     font-weight: var(--font-semibold);
     color: var(--text-primary);
+    line-height: 1;
   }
   
   .calendar-cell--future .cell-day {
     color: var(--text-muted);
   }
   
+  .calendar-cell--complete .cell-day {
+    color: var(--accent-success);
+  }
+  
+  .calendar-cell--missed .cell-day {
+    color: var(--accent-danger);
+  }
+  
   .cell-indicator {
-    font-size: 8px;
+    font-size: clamp(6px, 2vw, 9px);
     color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 1;
   }
   
   .calendar-cell--complete .cell-indicator {
@@ -368,9 +404,14 @@ import Layout from '../layouts/Layout.astro';
     color: var(--accent-danger);
   }
   
+  .calendar-cell--partial .cell-indicator {
+    color: var(--accent-warning);
+    font-weight: var(--font-semibold);
+  }
+  
   .cell-indicator svg {
-    width: 12px;
-    height: 12px;
+    width: clamp(10px, 3vw, 14px);
+    height: clamp(10px, 3vw, 14px);
   }
   
   /* Day Modal */
@@ -390,7 +431,8 @@ import Layout from '../layouts/Layout.astro';
   .day-modal-backdrop {
     position: absolute;
     inset: 0;
-    background-color: rgba(45, 42, 38, 0.4);
+    background-color: rgba(45, 42, 38, 0.5);
+    animation: fadeIn var(--duration-fast) var(--ease-out);
   }
   
   .day-modal-content {
@@ -400,7 +442,7 @@ import Layout from '../layouts/Layout.astro';
     background-color: var(--bg-card);
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     padding: var(--space-5);
-    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
     max-height: 80vh;
     overflow-y: auto;
     animation: slideUp var(--duration-normal) var(--ease-out);
@@ -423,6 +465,7 @@ import Layout from '../layouts/Layout.astro';
     font-family: var(--font-display);
     font-size: var(--text-xl);
     font-weight: var(--font-semibold);
+    color: var(--accent-primary);
   }
   
   .day-modal-full {
@@ -431,20 +474,27 @@ import Layout from '../layouts/Layout.astro';
   }
   
   .day-modal-close {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border: none;
-    background: transparent;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
     color: var(--text-muted);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  
+  .day-modal-close:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
   }
   
   .day-modal-close svg {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
   }
   
   .day-modal-goals {
@@ -457,9 +507,10 @@ import Layout from '../layouts/Layout.astro';
     display: flex;
     align-items: flex-start;
     gap: var(--space-3);
-    padding: var(--space-3);
+    padding: var(--space-4);
     background-color: var(--bg-secondary);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
+    transition: all var(--duration-fast) var(--ease-out);
   }
   
   .modal-goal--completed {
@@ -467,8 +518,8 @@ import Layout from '../layouts/Layout.astro';
   }
   
   .modal-goal-status {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: var(--radius-full);
     border: 2px solid currentColor;
     display: flex;
@@ -482,8 +533,8 @@ import Layout from '../layouts/Layout.astro';
   }
   
   .modal-goal-status svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     color: white;
   }
   
@@ -491,28 +542,40 @@ import Layout from '../layouts/Layout.astro';
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+    flex: 1;
+    min-width: 0;
   }
   
   .modal-goal-name {
     font-weight: var(--font-medium);
+    font-size: var(--text-base);
+  }
+  
+  .modal-goal--completed .modal-goal-name {
+    color: var(--accent-success);
   }
   
   .modal-goal-note {
     font-size: var(--text-sm);
     color: var(--text-secondary);
+    line-height: var(--leading-relaxed);
   }
   
   /* Empty State */
   .empty-state {
     text-align: center;
     padding: var(--space-10) var(--space-4);
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
   }
   
   .empty-icon {
-    width: 64px;
-    height: 64px;
+    width: 72px;
+    height: 72px;
     margin: 0 auto var(--space-4);
-    color: var(--text-muted);
+    color: var(--accent-primary);
+    opacity: 0.6;
   }
   
   .empty-icon svg {
@@ -527,6 +590,27 @@ import Layout from '../layouts/Layout.astro';
   
   .empty-description {
     color: var(--text-muted);
-    margin-bottom: var(--space-5);
+    margin-bottom: var(--space-6);
+  }
+  
+  /* Mobile Responsiveness */
+  @media (max-width: 380px) {
+    .calendar-grid {
+      gap: 4px;
+      padding: var(--space-3);
+    }
+    
+    .calendar-cell {
+      border-radius: var(--radius-sm);
+    }
+    
+    .legend-item {
+      gap: var(--space-1);
+    }
+    
+    .calendar-legend {
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+    }
   }
 </style>
