@@ -178,7 +178,7 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
     
     <p class="recovery-error" id="recovery-error" hidden></p>
     
-    <button class="btn btn-primary btn-lg btn-full" id="recover-btn" disabled>
+    <button class="btn btn-primary btn-lg btn-full" id="recover-btn">
       Recover Account
     </button>
     
@@ -456,12 +456,6 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
     recoveryModal.hidden = true;
     recoveryError.hidden = true;
     phraseTextarea.value = '';
-    recoverBtn.disabled = true;
-  }
-  
-  function validatePhraseInput() {
-    const words = phraseTextarea.value.trim().toLowerCase().split(/\s+/).filter(w => w.length > 0);
-    recoverBtn.disabled = words.length !== 12;
   }
   
   function getRecoveryPhrase(): string[] {
@@ -472,14 +466,11 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
   recoveryBackdrop.addEventListener('click', closeRecoveryModal);
   recoveryClose.addEventListener('click', closeRecoveryModal);
   
-  // Handle input in phrase textarea
-  phraseTextarea.addEventListener('input', validatePhraseInput);
-  
   recoverBtn.addEventListener('click', async () => {
     const phrase = getRecoveryPhrase();
     
-    if (phrase.length !== 12) {
-      recoveryError.textContent = 'Please enter all 12 words';
+    if (phrase.length === 0) {
+      recoveryError.textContent = 'Please enter your recovery phrase';
       recoveryError.hidden = false;
       return;
     }
