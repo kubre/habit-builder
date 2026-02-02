@@ -231,11 +231,10 @@ import DailyView from '../components/DailyView.astro';
       // Update snapshot
       saveSnapshot(challenge, goalStatuses, stats);
       
-      // Check if data changed significantly (goal completion status)
-      const needsRerender = goalStatuses.some((gs, i) => {
-        const cached = cachedChallenge.goals?.find((g: any) => g.id === gs.goal.id);
-        return !cached || gs.completed !== (cachedChallenge as any)._goalStatuses?.[i]?.completed;
-      });
+      // Check if data changed significantly (goal completion status or challenge details)
+      const challengeChanged = cachedChallenge.id !== challenge.id || 
+                               cachedChallenge.goals?.length !== challenge.goals?.length;
+      const needsRerender = challengeChanged;
       
       if (needsRerender) {
         // Re-render with fresh data
