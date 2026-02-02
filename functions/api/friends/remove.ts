@@ -7,6 +7,7 @@ import {
   jsonResponse,
   errorResponse,
   parseBody,
+  isValidUUID,
 } from '../../utils';
 
 interface RemoveRequest {
@@ -25,6 +26,11 @@ export const onRequestPost: PagesFunction<Env, '', { user: DBUser }> = async (co
   const body = await parseBody<RemoveRequest>(request);
   if (!body?.friendshipId) {
     return errorResponse('Friendship ID is required', 400, 'INVALID_REQUEST');
+  }
+  
+  // Validate UUID format before database query
+  if (!isValidUUID(body.friendshipId)) {
+    return errorResponse('Invalid friendship ID format', 400, 'INVALID_UUID');
   }
   
   // Find the friendship

@@ -8,6 +8,7 @@ import {
   errorResponse,
   parseBody,
   nowISO,
+  isValidUUID,
 } from '../../utils';
 
 export const onRequestPost: PagesFunction<Env, '', { user: DBUser }> = async (context) => {
@@ -26,6 +27,11 @@ export const onRequestPost: PagesFunction<Env, '', { user: DBUser }> = async (co
   
   if (body.action !== 'accept' && body.action !== 'deny') {
     return errorResponse('Action must be "accept" or "deny"', 400, 'INVALID_ACTION');
+  }
+  
+  // Validate UUID format before database query
+  if (!isValidUUID(body.friendshipId)) {
+    return errorResponse('Invalid friendship ID format', 400, 'INVALID_UUID');
   }
   
   // Find the friendship request

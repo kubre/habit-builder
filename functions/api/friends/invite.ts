@@ -9,6 +9,7 @@ import {
   errorResponse,
   parseBody,
   nowISO,
+  isValidFriendCode,
 } from '../../utils';
 
 export const onRequestPost: PagesFunction<Env, '', { user: DBUser }> = async (context) => {
@@ -26,6 +27,11 @@ export const onRequestPost: PagesFunction<Env, '', { user: DBUser }> = async (co
   }
   
   const friendCode = body.friendCode.trim().toUpperCase();
+  
+  // Validate friend code format before database query
+  if (!isValidFriendCode(friendCode)) {
+    return errorResponse('Invalid friend code format. Expected HABIT-XXXX', 400, 'INVALID_FRIEND_CODE');
+  }
   
   // Can't add yourself
   if (friendCode === user.friend_code) {

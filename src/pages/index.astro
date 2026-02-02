@@ -402,6 +402,7 @@ import DailyView from '../components/DailyView.astro';
     border-top-color: var(--accent-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
+    will-change: transform;
   }
   
   @keyframes spin {
@@ -784,6 +785,7 @@ import DailyView from '../components/DailyView.astro';
     height: 100%;
     color: var(--accent-warning);
     animation: flicker 2s ease-in-out infinite;
+    will-change: transform, opacity;
   }
   
   .flame--hot {

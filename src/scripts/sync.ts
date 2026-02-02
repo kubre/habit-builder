@@ -129,9 +129,19 @@ export async function performSync(): Promise<SyncResult> {
     let pulledChallenges = 0;
     let pulledEntries = 0;
     
-    // Step 2: Merge server changes into local DB
+    // Step 2: Fetch all local data ONCE for efficient comparison
+    const [localChallenges, localEntries] = await Promise.all([
+      db.getAllChallenges(),
+      db.getAllEntries()
+    ]);
+    
+    // Build lookup maps for O(1) access instead of O(n) per item
+    const localChallengeMap = new Map(localChallenges.map(c => [c.id, c]));
+    const localEntryMap = new Map(localEntries.map(e => [`${e.goalId}-${e.date}`, e]));
+    
+    // Merge server changes into local DB
     for (const serverChallenge of serverData.challenges) {
-      const localChallenge = await db.getChallenge(serverChallenge.id);
+      const localChallenge = localChallengeMap.get(serverChallenge.id);
       
       // If no local version, or server is newer, use server version
       if (!localChallenge || 
@@ -142,7 +152,8 @@ export async function performSync(): Promise<SyncResult> {
     }
     
     for (const serverEntry of serverData.entries) {
-      const localEntry = await db.getEntry(serverEntry.date, serverEntry.goalId);
+      const entryKey = `${serverEntry.goalId}-${serverEntry.date}`;
+      const localEntry = localEntryMap.get(entryKey);
       
       // If no local version, or server is newer, use server version
       if (!localEntry || 
@@ -152,9 +163,7 @@ export async function performSync(): Promise<SyncResult> {
       }
     }
     
-    // Step 3: Push local changes to server
-    const localChallenges = await db.getAllChallenges();
-    const localEntries = await db.getAllEntries();
+    // Step 3: Push local changes to server (reuse already-fetched data)
     
     // Filter to only include data that needs syncing
     // (updated after last sync or never synced)
@@ -162,18 +171,21 @@ export async function performSync(): Promise<SyncResult> {
       .filter(c => !lastSyncAt || (c.updatedAt && c.updatedAt > lastSyncAt))
       .map(toSyncChallenge);
     
-    // Map entries to their challenge IDs
-    const challengeMap = new Map(localChallenges.map(c => [c.id, c]));
+    // Build goalId -> challengeId map for O(1) lookup
+    const goalToChallengeMap = new Map<string, string>();
+    for (const challenge of localChallenges) {
+      for (const goal of challenge.goals) {
+        goalToChallengeMap.set(goal.id, challenge.id);
+      }
+    }
+    
     const entriesToPush: api.SyncEntry[] = [];
     
     for (const entry of localEntries) {
       if (!lastSyncAt || (entry.updatedAt && entry.updatedAt > lastSyncAt)) {
-        // Find which challenge this entry belongs to
-        for (const challenge of localChallenges) {
-          if (challenge.goals.some(g => g.id === entry.goalId)) {
-            entriesToPush.push(toSyncEntry(entry, challenge.id));
-            break;
-          }
+        const challengeId = goalToChallengeMap.get(entry.goalId);
+        if (challengeId) {
+          entriesToPush.push(toSyncEntry(entry, challengeId));
         }
       }
     }

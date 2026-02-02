@@ -309,6 +309,13 @@ Applied via middleware to all responses:
   - Entry validation (boolean completed, note length limit)
   - Goal ownership verification
   - Request size limits (50 challenges, 500 entries max)
+- UUID validation on friendship endpoints:
+  - `functions/api/friends/respond.ts` - validates `friendshipId`
+  - `functions/api/friends/remove.ts` - validates `friendshipId`
+  - `functions/api/feed/index.ts` - validates user IDs
+- Friend code format validation:
+  - `functions/api/friends/invite.ts` - validates `HABIT-XXXX` format
+  - `isValidFriendCode()` in `functions/utils.ts`
 
 ### Performance Optimizations
 - TTL-based caching layer (`src/scripts/cache.ts`)

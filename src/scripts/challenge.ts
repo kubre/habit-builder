@@ -85,12 +85,27 @@ export function isDayMissed(
  */
 export async function getDayStatuses(challenge: Challenge): Promise<DayStatus[]> {
   const entries = await getChallengeEntries(challenge.id);
+  return computeDayStatuses(challenge, entries);
+}
+
+/**
+ * Compute day statuses from pre-fetched entries (avoids repeated DB calls)
+ */
+export function computeDayStatuses(challenge: Challenge, entries: DayEntry[]): DayStatus[] {
   const dates = getChallengeDates(challenge.startDate, challenge.duration);
   const today = getToday();
   
+  // Build a Map for O(1) lookups instead of O(n) filter per day
+  const entriesByDate = new Map<string, DayEntry[]>();
+  for (const entry of entries) {
+    const existing = entriesByDate.get(entry.date) || [];
+    existing.push(entry);
+    entriesByDate.set(entry.date, existing);
+  }
+  
   return dates.map((date, index) => {
     const dayNumber = index + 1;
-    const dateEntries = entries.filter(e => e.date === date);
+    const dateEntries = entriesByDate.get(date) || [];
     const completedGoals = dateEntries.filter(e => e.completed).length;
     const isComplete = isDayComplete(date, challenge.goals, entries);
     const isMissed = isDayMissed(date, challenge.goals, entries, challenge.startDate);
@@ -111,9 +126,9 @@ export async function getDayStatuses(challenge: Challenge): Promise<DayStatus[]>
 
 /**
  * Calculate current streak (consecutive days completed ending today or yesterday)
+ * Accepts pre-computed statuses to avoid redundant DB calls
  */
-export async function calculateCurrentStreak(challenge: Challenge): Promise<number> {
-  const statuses = await getDayStatuses(challenge);
+export function calculateCurrentStreakFromStatuses(statuses: DayStatus[]): number {
   const today = getToday();
   
   // Find today's or yesterday's index as starting point
@@ -139,10 +154,18 @@ export async function calculateCurrentStreak(challenge: Challenge): Promise<numb
 }
 
 /**
- * Calculate best streak ever achieved in the challenge
+ * Calculate current streak (legacy async version for backward compatibility)
  */
-export async function calculateBestStreak(challenge: Challenge): Promise<number> {
+export async function calculateCurrentStreak(challenge: Challenge): Promise<number> {
   const statuses = await getDayStatuses(challenge);
+  return calculateCurrentStreakFromStatuses(statuses);
+}
+
+/**
+ * Calculate best streak ever achieved in the challenge
+ * Accepts pre-computed statuses to avoid redundant DB calls
+ */
+export function calculateBestStreakFromStatuses(statuses: DayStatus[]): number {
   let bestStreak = 0;
   let currentStreak = 0;
   
@@ -162,9 +185,19 @@ export async function calculateBestStreak(challenge: Challenge): Promise<number>
 }
 
 /**
+ * Calculate best streak (legacy async version for backward compatibility)
+ */
+export async function calculateBestStreak(challenge: Challenge): Promise<number> {
+  const statuses = await getDayStatuses(challenge);
+  return calculateBestStreakFromStatuses(statuses);
+}
+
+/**
  * Get comprehensive challenge statistics
+ * Optimized to fetch data once and reuse for all calculations
  */
 export async function getChallengeStats(challenge: Challenge): Promise<ChallengeStats> {
+  // Single DB call - statuses are computed once and reused
   const statuses = await getDayStatuses(challenge);
   const today = getToday();
   const currentDay = getDayNumber(challenge.startDate, today);
@@ -172,8 +205,9 @@ export async function getChallengeStats(challenge: Challenge): Promise<Challenge
   const pastStatuses = statuses.filter(s => s.isPast || s.isToday);
   const completedDays = pastStatuses.filter(s => s.isComplete).length;
   
-  const currentStreak = await calculateCurrentStreak(challenge);
-  const bestStreak = await calculateBestStreak(challenge);
+  // Use pre-computed statuses instead of fetching again
+  const currentStreak = calculateCurrentStreakFromStatuses(statuses);
+  const bestStreak = calculateBestStreakFromStatuses(statuses);
   
   const activeDays = Math.min(currentDay, challenge.duration);
   const completionRate = activeDays > 0 

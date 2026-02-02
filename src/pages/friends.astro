@@ -298,13 +298,15 @@ import Layout from '../layouts/Layout.astro';
     // Show friend code
     document.getElementById('your-friend-code')!.textContent = currentAccount!.friendCode;
     
-    // Sync on open
+    // Sync on open (must complete before loading data)
     await syncOnOpen();
     
-    // Load data
-    await loadFriendRequests();
-    await loadFriendsList();
-    await loadFeed();
+    // Load all data in parallel for faster page load
+    await Promise.all([
+      loadFriendRequests(),
+      loadFriendsList(),
+      loadFeed()
+    ]);
   }
   
   // Refresh button handler

@@ -162,3 +162,16 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 export function isValidUUID(str: string): boolean {
   return UUID_PATTERN.test(str);
 }
+
+/**
+ * Friend code validation regex pattern (HABIT-XXXX format)
+ * Characters: A-Z excluding I/O, digits 2-9 excluding 0/1
+ */
+const FRIEND_CODE_PATTERN = /^HABIT-[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$/;
+
+/**
+ * Validate that a string is a valid friend code format
+ */
+export function isValidFriendCode(str: string): boolean {
+  return FRIEND_CODE_PATTERN.test(str);
+}
