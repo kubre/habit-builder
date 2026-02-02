@@ -153,6 +153,7 @@ export async function getPastChallenges(): Promise<Challenge[]> {
 
 /**
  * Get all entries for a specific challenge (cached)
+ * Uses IndexedDB goalId index for faster queries on mobile
  */
 export async function getChallengeEntries(challengeId: string): Promise<DayEntry[]> {
   return withCache(
@@ -162,10 +163,10 @@ export async function getChallengeEntries(challengeId: string): Promise<DayEntry
       const challenge = await db.getChallenge(challengeId);
       if (!challenge) return [];
       
-      const goalIds = new Set(challenge.goals.map(g => g.id));
-      const allEntries = await db.getAllEntries();
+      const goalIds = challenge.goals.map(g => g.id);
       
-      return allEntries.filter(e => goalIds.has(e.goalId));
+      // Use index-based query - much faster than getAllEntries + filter
+      return db.getEntriesByGoalIds(goalIds);
     },
     challengeId
   );
@@ -285,4 +286,36 @@ export async function initStore(): Promise<void> {
  */
 export function isStoreAvailable(): boolean {
   return db.isDBAvailable();
+}
+
+/**
+ * Get all data needed for initial app render in a SINGLE IndexedDB transaction
+ * This is dramatically faster on mobile Safari than multiple separate calls
+ */
+export async function getInitialRenderData(today: string): Promise<{
+  challenge: Challenge | null;
+  todayEntries: DayEntry[];
+  allEntries: DayEntry[];
+} | null> {
+  try {
+    const state = await db.getAppStateForRender(today);
+    
+    if (!state.currentChallenge) {
+      return null;
+    }
+    
+    // Filter entries to only those belonging to current challenge's goals
+    const goalIds = new Set(state.currentChallenge.goals.map(g => g.id));
+    const challengeEntries = state.allChallengeEntries.filter(e => goalIds.has(e.goalId));
+    const todayEntries = state.todayEntries.filter(e => goalIds.has(e.goalId));
+    
+    return {
+      challenge: state.currentChallenge,
+      todayEntries,
+      allEntries: challengeEntries
+    };
+  } catch (error) {
+    console.error('Failed to get initial render data:', error);
+    return null;
+  }
 }

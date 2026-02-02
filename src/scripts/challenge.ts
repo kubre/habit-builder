@@ -282,3 +282,60 @@ export async function getTodayGoalsStatus(challenge: Challenge): Promise<{
     };
   });
 }
+
+// ============================================
+// Pre-fetched data functions (no additional DB calls)
+// ============================================
+
+/**
+ * Get goals completion status for today from pre-fetched entries
+ * No DB calls - uses provided data
+ */
+export function getTodayGoalsStatusFromEntries(
+  challenge: Challenge, 
+  todayEntries: DayEntry[]
+): { goal: Goal; completed: boolean; note?: string }[] {
+  return challenge.goals.map(goal => {
+    const entry = todayEntries.find(e => e.goalId === goal.id);
+    return {
+      goal,
+      completed: entry?.completed ?? false,
+      note: entry?.note
+    };
+  });
+}
+
+/**
+ * Get comprehensive challenge statistics from pre-fetched entries
+ * No DB calls - uses provided data
+ */
+export function getChallengeStatsFromEntries(
+  challenge: Challenge,
+  allEntries: DayEntry[]
+): ChallengeStats {
+  const statuses = computeDayStatuses(challenge, allEntries);
+  const today = getToday();
+  const currentDay = getDayNumber(challenge.startDate, today);
+  
+  const pastStatuses = statuses.filter(s => s.isPast || s.isToday);
+  const completedDays = pastStatuses.filter(s => s.isComplete).length;
+  
+  // Use pre-computed statuses instead of fetching again
+  const currentStreak = calculateCurrentStreakFromStatuses(statuses);
+  const bestStreak = calculateBestStreakFromStatuses(statuses);
+  
+  const activeDays = Math.min(currentDay, challenge.duration);
+  const completionRate = activeDays > 0 
+    ? Math.round((completedDays / activeDays) * 100) 
+    : 0;
+  
+  return {
+    currentStreak,
+    bestStreak,
+    totalDaysCompleted: completedDays,
+    totalDays: challenge.duration,
+    completionRate,
+    currentDay: Math.min(currentDay, challenge.duration),
+    daysRemaining: Math.max(0, challenge.duration - currentDay)
+  };
+}

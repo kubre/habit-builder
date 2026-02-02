@@ -76,7 +76,7 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
   import { getCurrentChallenge, getChallengeEntries, initStore } from '../scripts/store';
-  import { getDayStatuses } from '../scripts/challenge';
+  import { computeDayStatuses } from '../scripts/challenge';
   import { formatFullDate } from '../scripts/dates';
   import { escapeHTML } from '../scripts/ui';
   
@@ -103,8 +103,10 @@ import Layout from '../layouts/Layout.astro';
   
   async function renderCalendar(challenge: any) {
     const calendarGrid = document.getElementById('calendar-grid')!;
-    const statuses = await getDayStatuses(challenge);
+    
+    // Fetch entries ONCE, then compute statuses from them (no double fetch)
     const entries = await getChallengeEntries(challenge.id);
+    const statuses = computeDayStatuses(challenge, entries);
     
     // Day headers
     const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];

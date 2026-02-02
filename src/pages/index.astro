@@ -62,8 +62,8 @@ import DailyView from '../components/DailyView.astro';
 </Layout>
 
 <script>
-  import { getCurrentChallenge, initStore, toggleEntry } from '../scripts/store';
-  import { getTodayGoalsStatus, getChallengeStats, checkStrictModeViolation } from '../scripts/challenge';
+  import { getCurrentChallenge, initStore, toggleEntry, getInitialRenderData } from '../scripts/store';
+  import { getTodayGoalsStatus, getChallengeStats, checkStrictModeViolation, getTodayGoalsStatusFromEntries, getChallengeStatsFromEntries } from '../scripts/challenge';
   import { getToday } from '../scripts/dates';
   import { syncOnOpen } from '../scripts/sync';
   import { getLocalAccount } from '../scripts/auth';
@@ -71,6 +71,11 @@ import DailyView from '../components/DailyView.astro';
   
   // Constants for localStorage cache
   const HAS_CHALLENGE_KEY = 'habit-build-has-challenge';
+  const SNAPSHOT_KEY = 'habit-build-snapshot';
+  const SNAPSHOT_MAX_AGE = 5 * 60 * 1000; // 5 minutes
+  
+  // Polyfill for requestIdleCallback
+  const requestIdleCallback = window.requestIdleCallback || ((cb: Function) => setTimeout(cb, 1));
   
   // Initialize immediately (don't wait for DOMContentLoaded on modern browsers)
   if (document.readyState === 'loading') {
@@ -79,9 +84,67 @@ import DailyView from '../components/DailyView.astro';
     initApp();
   }
   
+  interface Snapshot {
+    challenge: any;
+    goalStatuses: any[];
+    stats: any;
+    today: string;
+    timestamp: number;
+  }
+  
+  function getSnapshot(): Snapshot | null {
+    try {
+      const raw = localStorage.getItem(SNAPSHOT_KEY);
+      if (!raw) return null;
+      const snapshot = JSON.parse(raw) as Snapshot;
+      
+      // Validate snapshot is fresh and for today
+      const now = Date.now();
+      const today = getToday();
+      if (now - snapshot.timestamp > SNAPSHOT_MAX_AGE) return null;
+      if (snapshot.today !== today) return null;
+      
+      return snapshot;
+    } catch {
+      return null;
+    }
+  }
+  
+  function saveSnapshot(challenge: any, goalStatuses: any[], stats: any) {
+    try {
+      const snapshot: Snapshot = {
+        challenge,
+        goalStatuses,
+        stats,
+        today: getToday(),
+        timestamp: Date.now()
+      };
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
+      localStorage.setItem(HAS_CHALLENGE_KEY, 'true');
+    } catch (e) {
+      // localStorage might be full, ignore
+    }
+  }
+  
+  function clearSnapshot() {
+    localStorage.removeItem(SNAPSHOT_KEY);
+    localStorage.setItem(HAS_CHALLENGE_KEY, 'false');
+  }
+  
   async function initApp() {
     const appRoot = document.getElementById('app-root')!;
     const loadingState = document.getElementById('loading-state')!;
+    
+    // PHASE 1: Try to render INSTANTLY from localStorage snapshot
+    const snapshot = getSnapshot();
+    if (snapshot) {
+      // Render immediately from cache - no waiting!
+      renderDailyView(appRoot, loadingState, snapshot.challenge, snapshot.goalStatuses, snapshot.stats);
+      
+      // Verify and update from IndexedDB in background
+      verifyAndUpdateFromDB(appRoot, snapshot.challenge);
+      return;
+    }
     
     // Quick check: if we know there's no challenge, show onboarding immediately
     const cachedHasChallenge = localStorage.getItem(HAS_CHALLENGE_KEY);
@@ -97,71 +160,118 @@ import DailyView from '../components/DailyView.astro';
       return;
     }
     
+    // PHASE 2: No snapshot available, load from IndexedDB
     try {
-      // Initialize database (required for all operations)
       await initStore();
       
-      // Fetch challenge - this is the critical path
-      const challenge = await getCurrentChallenge();
+      // SINGLE TRANSACTION: Get all data in one IndexedDB transaction
+      // This is MUCH faster on iOS than multiple separate calls
+      const today = getToday();
+      const renderData = await getInitialRenderData(today);
       
-      if (!challenge) {
-        localStorage.setItem(HAS_CHALLENGE_KEY, 'false');
+      if (!renderData || !renderData.challenge) {
+        clearSnapshot();
         showOnboarding(appRoot, loadingState);
         return;
       }
       
-      // Cache that we have a challenge
-      localStorage.setItem(HAS_CHALLENGE_KEY, 'true');
+      const { challenge, todayEntries, allEntries } = renderData;
       
-      // PARALLEL FETCH: Get all data needed for render at once
+      // Compute stats from pre-fetched data (no additional DB calls)
+      const goalStatuses = getTodayGoalsStatusFromEntries(challenge, todayEntries);
+      const stats = getChallengeStatsFromEntries(challenge, allEntries);
+      
+      // Save snapshot for next time
+      saveSnapshot(challenge, goalStatuses, stats);
+      
+      // Render the daily view
+      renderDailyView(appRoot, loadingState, challenge, goalStatuses, stats);
+      
+      // Run deferred operations
+      runDeferredOperations(challenge);
+      
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+      clearSnapshot();
+      showOnboarding(appRoot, loadingState);
+    }
+  }
+  
+  function renderDailyView(appRoot: HTMLElement, loadingState: HTMLElement, challenge: any, goalStatuses: any[], stats: any) {
+    const html = buildDailyViewHTML(challenge, goalStatuses, stats);
+    loadingState.remove();
+    appRoot.innerHTML = html;
+    
+    // Show navigation
+    const nav = document.querySelector('.nav');
+    if (nav) (nav as HTMLElement).style.display = '';
+    
+    // Initialize interactions
+    initDailyViewInteractions();
+  }
+  
+  async function verifyAndUpdateFromDB(appRoot: HTMLElement, cachedChallenge: any) {
+    try {
+      await initStore();
+      const challenge = await getCurrentChallenge();
+      
+      if (!challenge) {
+        // Challenge was deleted, reload to show onboarding
+        clearSnapshot();
+        window.location.reload();
+        return;
+      }
+      
+      // Fetch fresh data
       const [goalStatuses, stats] = await Promise.all([
         getTodayGoalsStatus(challenge),
         getChallengeStats(challenge)
       ]);
       
-      // Render the daily view immediately
-      const html = buildDailyViewHTML(challenge, goalStatuses, stats);
-      loadingState.remove();
-      appRoot.innerHTML = html;
+      // Update snapshot
+      saveSnapshot(challenge, goalStatuses, stats);
       
-      // Show navigation
-      const nav = document.querySelector('.nav');
-      if (nav) (nav as HTMLElement).style.display = '';
+      // Check if data changed significantly (goal completion status)
+      const needsRerender = goalStatuses.some((gs, i) => {
+        const cached = cachedChallenge.goals?.find((g: any) => g.id === gs.goal.id);
+        return !cached || gs.completed !== (cachedChallenge as any)._goalStatuses?.[i]?.completed;
+      });
       
-      // Initialize interactions
-      initDailyViewInteractions();
+      if (needsRerender) {
+        // Re-render with fresh data
+        const loadingState = document.createElement('div');
+        renderDailyView(appRoot, loadingState, challenge, goalStatuses, stats);
+      }
       
-      // DEFERRED: Run these after UI is visible (non-blocking)
-      requestIdleCallback(() => {
-        // Check strict mode violation
-        if (challenge.strictMode) {
-          checkStrictModeViolation(challenge).then(failedDay => {
-            if (failedDay !== null) {
-              localStorage.setItem(HAS_CHALLENGE_KEY, 'false');
-              showStrictFailureModal(failedDay);
-              // Reload to show onboarding
-              setTimeout(() => window.location.reload(), 100);
-            }
-          });
-        }
-        
-        // Sync with server
-        getLocalAccount().then(account => {
-          if (account) {
-            syncOnOpen().catch(err => console.warn('Sync error:', err));
-          }
-        });
-      }, { timeout: 2000 });
+      // Run deferred operations
+      runDeferredOperations(challenge);
       
     } catch (error) {
-      console.error('Failed to initialize app:', error);
-      localStorage.removeItem(HAS_CHALLENGE_KEY);
-      showOnboarding(appRoot, loadingState);
+      console.warn('Background verification failed:', error);
     }
   }
   
-  // Polyfill for requestIdleCallback
-  const requestIdleCallback = window.requestIdleCallback || ((cb: Function) => setTimeout(cb, 1));
+  function runDeferredOperations(challenge: any) {
+    requestIdleCallback(() => {
+      // Check strict mode violation
+      if (challenge.strictMode) {
+        checkStrictModeViolation(challenge).then(failedDay => {
+          if (failedDay !== null) {
+            clearSnapshot();
+            showStrictFailureModal(failedDay);
+            setTimeout(() => window.location.reload(), 100);
+          }
+        });
+      }
+      
+      // Sync with server
+      getLocalAccount().then(account => {
+        if (account) {
+          syncOnOpen().catch(err => console.warn('Sync error:', err));
+        }
+      });
+    }, { timeout: 2000 });
+  }
   
   function showOnboarding(appRoot: HTMLElement, loadingState: HTMLElement) {
     const template = document.getElementById('onboarding-template') as HTMLTemplateElement;

@@ -411,3 +411,106 @@ export async function importAllData(state: AppState): Promise<void> {
 export function isDBAvailable(): boolean {
   return typeof window !== 'undefined' && !!window.indexedDB;
 }
+
+// ============================================
+// Batched Operations (Performance Optimized)
+// ============================================
+
+export interface AppStateForRender {
+  currentChallengeId: string | null;
+  currentChallenge: Challenge | null;
+  todayEntries: DayEntry[];
+  allChallengeEntries: DayEntry[];
+}
+
+/**
+ * Fetch all data needed for initial render in a SINGLE transaction
+ * This is much faster on mobile Safari than multiple separate transactions
+ */
+export async function getAppStateForRender(today: string): Promise<AppStateForRender> {
+  const db = await openDB();
+  
+  return new Promise((resolve, reject) => {
+    const result: AppStateForRender = {
+      currentChallengeId: null,
+      currentChallenge: null,
+      todayEntries: [],
+      allChallengeEntries: []
+    };
+    
+    // Single transaction for all stores - much faster than separate transactions
+    const tx = db.transaction([STORES.settings, STORES.challenges, STORES.entries], 'readonly');
+    
+    // Get currentChallengeId from settings
+    const settingsStore = tx.objectStore(STORES.settings);
+    const settingsReq = settingsStore.get('currentChallengeId');
+    
+    settingsReq.onsuccess = () => {
+      result.currentChallengeId = settingsReq.result?.value ?? null;
+      
+      if (result.currentChallengeId) {
+        // Get the current challenge
+        const challengeStore = tx.objectStore(STORES.challenges);
+        const challengeReq = challengeStore.get(result.currentChallengeId);
+        
+        challengeReq.onsuccess = () => {
+          result.currentChallenge = challengeReq.result || null;
+        };
+      }
+    };
+    
+    // Get today's entries using the date index
+    const entriesStore = tx.objectStore(STORES.entries);
+    const dateIndex = entriesStore.index('date');
+    const todayEntriesReq = dateIndex.getAll(today);
+    
+    todayEntriesReq.onsuccess = () => {
+      result.todayEntries = todayEntriesReq.result || [];
+    };
+    
+    // Also get all entries for computing stats (we need this for streaks)
+    const allEntriesReq = entriesStore.getAll();
+    
+    allEntriesReq.onsuccess = () => {
+      result.allChallengeEntries = allEntriesReq.result || [];
+    };
+    
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Get entries for specific goal IDs using the goalId index
+ * Much faster than getAllEntries() + filter in JavaScript
+ */
+export async function getEntriesByGoalIds(goalIds: string[]): Promise<DayEntry[]> {
+  if (goalIds.length === 0) return [];
+  
+  const db = await openDB();
+  
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.entries, 'readonly');
+    const store = tx.objectStore(STORES.entries);
+    const index = store.index('goalId');
+    
+    const results: DayEntry[] = [];
+    let completed = 0;
+    
+    for (const goalId of goalIds) {
+      const request = index.getAll(goalId);
+      
+      request.onsuccess = () => {
+        results.push(...(request.result || []));
+        completed++;
+        
+        if (completed === goalIds.length) {
+          // Don't wait for transaction complete, we have all data
+          resolve(results);
+        }
+      };
+      
+      request.onerror = () => reject(request.error);
+    }
+  });
+}
