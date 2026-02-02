@@ -7,6 +7,9 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
   <div class="onboarding-header">
     <h1 class="onboarding-title">Start Your Journey</h1>
     <p class="onboarding-subtitle">Build lasting habits, one day at a time</p>
+    <button class="recovery-link" id="show-recovery-btn" type="button">
+      Have an account? Recover it
+    </button>
   </div>
   
   <!-- Progress Indicator -->
@@ -150,6 +153,47 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
   </div>
 </div>
 
+<!-- Recovery Modal -->
+<div class="recovery-modal" id="recovery-modal" hidden>
+  <div class="recovery-backdrop" id="recovery-backdrop"></div>
+  <div class="recovery-content">
+    <button class="recovery-close" id="recovery-close" type="button" aria-label="Close">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+    <h2 class="recovery-title">Recover Your Account</h2>
+    <p class="recovery-description">Enter your 12-word recovery phrase to restore your account and data.</p>
+    
+    <div class="recovery-phrase-input" id="recovery-phrase-input">
+      <input type="text" class="phrase-word" data-index="0" placeholder="1" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="1" placeholder="2" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="2" placeholder="3" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="3" placeholder="4" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="4" placeholder="5" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="5" placeholder="6" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="6" placeholder="7" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="7" placeholder="8" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="8" placeholder="9" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="9" placeholder="10" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="10" placeholder="11" autocomplete="off" autocapitalize="none" />
+      <input type="text" class="phrase-word" data-index="11" placeholder="12" autocomplete="off" autocapitalize="none" />
+    </div>
+    
+    <p class="recovery-error" id="recovery-error" hidden></p>
+    
+    <button class="btn btn-primary btn-lg btn-full" id="recover-btn" disabled>
+      Recover Account
+    </button>
+    
+    <p class="recovery-hint">
+      Your recovery phrase was shown when you first created your account. 
+      It's 12 words separated by spaces.
+    </p>
+  </div>
+</div>
+
 <!-- Goal Color Palette (hidden, used by JS) -->
 <template id="color-options-template">
   {GOAL_COLORS.map(color => (
@@ -182,6 +226,9 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
 
 <script>
   import { createChallenge } from '../scripts/store';
+  import { recover } from '../scripts/api';
+  import { updateAccountFromRecovery } from '../scripts/auth';
+  import { tryRecoverFromCloud } from '../scripts/sync';
   import { GOAL_COLORS, MAX_GOALS, DEFAULT_DURATION } from '../scripts/types';
   import type { GoalColor } from '../scripts/types';
   
@@ -392,6 +439,132 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
     document.querySelectorAll('.goal-item.dropdown-open').forEach(el => {
       el.classList.remove('dropdown-open');
     });
+  });
+  
+  // ============================================
+  // Recovery Modal
+  // ============================================
+  const recoveryModal = document.getElementById('recovery-modal') as HTMLElement;
+  const recoveryBackdrop = document.getElementById('recovery-backdrop')!;
+  const recoveryClose = document.getElementById('recovery-close')!;
+  const showRecoveryBtn = document.getElementById('show-recovery-btn')!;
+  const recoverBtn = document.getElementById('recover-btn') as HTMLButtonElement;
+  const recoveryError = document.getElementById('recovery-error') as HTMLElement;
+  const phraseInputs = document.querySelectorAll('.phrase-word') as NodeListOf<HTMLInputElement>;
+  
+  function openRecoveryModal() {
+    recoveryModal.hidden = false;
+    phraseInputs[0].focus();
+  }
+  
+  function closeRecoveryModal() {
+    recoveryModal.hidden = true;
+    recoveryError.hidden = true;
+    phraseInputs.forEach(input => input.value = '');
+    recoverBtn.disabled = true;
+  }
+  
+  function validatePhraseInputs() {
+    const allFilled = Array.from(phraseInputs).every(input => input.value.trim().length > 0);
+    recoverBtn.disabled = !allFilled;
+  }
+  
+  function getRecoveryPhrase(): string[] {
+    return Array.from(phraseInputs).map(input => input.value.trim().toLowerCase());
+  }
+  
+  showRecoveryBtn.addEventListener('click', openRecoveryModal);
+  recoveryBackdrop.addEventListener('click', closeRecoveryModal);
+  recoveryClose.addEventListener('click', closeRecoveryModal);
+  
+  // Handle input in phrase fields
+  phraseInputs.forEach((input, index) => {
+    input.addEventListener('input', () => {
+      // Auto-advance to next input when word is entered
+      const value = input.value.trim();
+      if (value.includes(' ')) {
+        // User pasted multiple words - split them
+        const words = value.split(/\s+/).filter(w => w.length > 0);
+        words.forEach((word, i) => {
+          if (index + i < phraseInputs.length) {
+            phraseInputs[index + i].value = word;
+          }
+        });
+        // Focus the next empty input or the last one
+        const nextIndex = Math.min(index + words.length, phraseInputs.length - 1);
+        phraseInputs[nextIndex].focus();
+      }
+      validatePhraseInputs();
+    });
+    
+    input.addEventListener('keydown', (e) => {
+      if (e.key === ' ' || e.key === 'Tab') {
+        if (index < phraseInputs.length - 1 && input.value.trim()) {
+          e.preventDefault();
+          phraseInputs[index + 1].focus();
+        }
+      } else if (e.key === 'Backspace' && !input.value && index > 0) {
+        e.preventDefault();
+        phraseInputs[index - 1].focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!recoverBtn.disabled) {
+          recoverBtn.click();
+        }
+      }
+    });
+  });
+  
+  recoverBtn.addEventListener('click', async () => {
+    const phrase = getRecoveryPhrase();
+    
+    if (phrase.length !== 12) {
+      recoveryError.textContent = 'Please enter all 12 words';
+      recoveryError.hidden = false;
+      return;
+    }
+    
+    recoverBtn.disabled = true;
+    recoverBtn.textContent = 'Recovering...';
+    recoveryError.hidden = true;
+    
+    try {
+      const result = await recover(phrase);
+      
+      if (result.error) {
+        recoveryError.textContent = result.error === 'Invalid recovery phrase' 
+          ? 'Invalid recovery phrase. Please check your words and try again.'
+          : result.error;
+        recoveryError.hidden = false;
+        recoverBtn.disabled = false;
+        recoverBtn.textContent = 'Recover Account';
+        return;
+      }
+      
+      // Save account info
+      await updateAccountFromRecovery(result.data!.user, result.data!.authToken);
+      
+      // Try to recover data from cloud
+      recoverBtn.textContent = 'Restoring data...';
+      await tryRecoverFromCloud();
+      
+      // Reload the page to show the recovered data
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('Recovery error:', error);
+      recoveryError.textContent = 'Recovery failed. Please try again.';
+      recoveryError.hidden = false;
+      recoverBtn.disabled = false;
+      recoverBtn.textContent = 'Recover Account';
+    }
+  });
+  
+  // Close modal on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !recoveryModal.hidden) {
+      closeRecoveryModal();
+    }
   });
 </script>
 
@@ -769,5 +942,145 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
   
   .toggle-switch input:checked + .toggle-slider::before {
     transform: translateX(20px);
+  }
+  
+  /* Recovery Link */
+  .recovery-link {
+    margin-top: var(--space-4);
+    color: var(--accent-primary);
+    background: none;
+    border: none;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  
+  .recovery-link:hover {
+    color: var(--text-primary);
+  }
+  
+  /* Recovery Modal */
+  .recovery-modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+  }
+  
+  .recovery-modal[hidden] {
+    display: none;
+  }
+  
+  .recovery-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(45, 42, 38, 0.7);
+  }
+  
+  .recovery-content {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    animation: scaleIn var(--duration-normal) var(--ease-out);
+  }
+  
+  .recovery-close {
+    position: absolute;
+    top: var(--space-4);
+    right: var(--space-4);
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  
+  .recovery-close:hover {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+  
+  .recovery-title {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-2);
+    padding-right: var(--space-8);
+  }
+  
+  .recovery-description {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-5);
+  }
+  
+  .recovery-phrase-input {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+  }
+  
+  .phrase-word {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    text-align: center;
+    transition: border-color var(--duration-fast) var(--ease-out);
+  }
+  
+  .phrase-word:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+  }
+  
+  .phrase-word::placeholder {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+  }
+  
+  .recovery-error {
+    color: var(--accent-danger);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-4);
+    padding: var(--space-3);
+    background-color: rgba(194, 93, 78, 0.1);
+    border-radius: var(--radius-md);
+  }
+  
+  .recovery-error[hidden] {
+    display: none;
+  }
+  
+  .recovery-hint {
+    margin-top: var(--space-4);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    text-align: center;
+  }
+  
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 </style>
