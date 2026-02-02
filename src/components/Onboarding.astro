@@ -166,20 +166,15 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
     <h2 class="recovery-title">Recover Your Account</h2>
     <p class="recovery-description">Enter your 12-word recovery phrase to restore your account and data.</p>
     
-    <div class="recovery-phrase-input" id="recovery-phrase-input">
-      <input type="text" class="phrase-word" data-index="0" placeholder="1" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="1" placeholder="2" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="2" placeholder="3" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="3" placeholder="4" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="4" placeholder="5" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="5" placeholder="6" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="6" placeholder="7" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="7" placeholder="8" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="8" placeholder="9" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="9" placeholder="10" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="10" placeholder="11" autocomplete="off" autocapitalize="none" />
-      <input type="text" class="phrase-word" data-index="11" placeholder="12" autocomplete="off" autocapitalize="none" />
-    </div>
+    <textarea 
+      class="recovery-phrase-textarea" 
+      id="recovery-phrase-textarea" 
+      placeholder="Enter your 12-word recovery phrase..."
+      autocomplete="off" 
+      autocapitalize="none"
+      spellcheck="false"
+      rows="3"
+    ></textarea>
     
     <p class="recovery-error" id="recovery-error" hidden></p>
     
@@ -450,70 +445,35 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
   const showRecoveryBtn = document.getElementById('show-recovery-btn')!;
   const recoverBtn = document.getElementById('recover-btn') as HTMLButtonElement;
   const recoveryError = document.getElementById('recovery-error') as HTMLElement;
-  const phraseInputs = document.querySelectorAll('.phrase-word') as NodeListOf<HTMLInputElement>;
+  const phraseTextarea = document.getElementById('recovery-phrase-textarea') as HTMLTextAreaElement;
   
   function openRecoveryModal() {
     recoveryModal.hidden = false;
-    phraseInputs[0].focus();
+    phraseTextarea.focus();
   }
   
   function closeRecoveryModal() {
     recoveryModal.hidden = true;
     recoveryError.hidden = true;
-    phraseInputs.forEach(input => input.value = '');
+    phraseTextarea.value = '';
     recoverBtn.disabled = true;
   }
   
-  function validatePhraseInputs() {
-    const allFilled = Array.from(phraseInputs).every(input => input.value.trim().length > 0);
-    recoverBtn.disabled = !allFilled;
+  function validatePhraseInput() {
+    const words = phraseTextarea.value.trim().toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    recoverBtn.disabled = words.length !== 12;
   }
   
   function getRecoveryPhrase(): string[] {
-    return Array.from(phraseInputs).map(input => input.value.trim().toLowerCase());
+    return phraseTextarea.value.trim().toLowerCase().split(/\s+/).filter(w => w.length > 0);
   }
   
   showRecoveryBtn.addEventListener('click', openRecoveryModal);
   recoveryBackdrop.addEventListener('click', closeRecoveryModal);
   recoveryClose.addEventListener('click', closeRecoveryModal);
   
-  // Handle input in phrase fields
-  phraseInputs.forEach((input, index) => {
-    input.addEventListener('input', () => {
-      // Auto-advance to next input when word is entered
-      const value = input.value.trim();
-      if (value.includes(' ')) {
-        // User pasted multiple words - split them
-        const words = value.split(/\s+/).filter(w => w.length > 0);
-        words.forEach((word, i) => {
-          if (index + i < phraseInputs.length) {
-            phraseInputs[index + i].value = word;
-          }
-        });
-        // Focus the next empty input or the last one
-        const nextIndex = Math.min(index + words.length, phraseInputs.length - 1);
-        phraseInputs[nextIndex].focus();
-      }
-      validatePhraseInputs();
-    });
-    
-    input.addEventListener('keydown', (e) => {
-      if (e.key === ' ' || e.key === 'Tab') {
-        if (index < phraseInputs.length - 1 && input.value.trim()) {
-          e.preventDefault();
-          phraseInputs[index + 1].focus();
-        }
-      } else if (e.key === 'Backspace' && !input.value && index > 0) {
-        e.preventDefault();
-        phraseInputs[index - 1].focus();
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (!recoverBtn.disabled) {
-          recoverBtn.click();
-        }
-      }
-    });
-  });
+  // Handle input in phrase textarea
+  phraseTextarea.addEventListener('input', validatePhraseInput);
   
   recoverBtn.addEventListener('click', async () => {
     const phrase = getRecoveryPhrase();
@@ -1027,30 +987,26 @@ import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../s
     margin-bottom: var(--space-5);
   }
   
-  .recovery-phrase-input {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-2);
-    margin-bottom: var(--space-4);
-  }
-  
-  .phrase-word {
-    padding: var(--space-2) var(--space-3);
+  .recovery-phrase-textarea {
+    width: 100%;
+    padding: var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    font-size: var(--text-sm);
-    text-align: center;
+    font-size: var(--text-base);
+    font-family: inherit;
+    line-height: 1.5;
+    resize: none;
+    margin-bottom: var(--space-4);
     transition: border-color var(--duration-fast) var(--ease-out);
   }
   
-  .phrase-word:focus {
+  .recovery-phrase-textarea:focus {
     outline: none;
     border-color: var(--accent-primary);
   }
   
-  .phrase-word::placeholder {
+  .recovery-phrase-textarea::placeholder {
     color: var(--text-muted);
-    font-size: var(--text-xs);
   }
   
   .recovery-error {
