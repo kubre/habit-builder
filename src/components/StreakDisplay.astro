@@ -1,0 +1,180 @@
+---
+// StreakDisplay Component - Shows current streak and progress stats
+interface Props {
+  currentStreak: number;
+  bestStreak: number;
+  currentDay: number;
+  totalDays: number;
+  completionRate: number;
+}
+
+const { currentStreak, bestStreak, currentDay, totalDays, completionRate } = Astro.props;
+const progress = Math.min((currentDay / totalDays) * 100, 100);
+---
+
+<div class="streak-display">
+  <div class="streak-main">
+    <div class="streak-number-wrapper">
+      <span class="streak-number display-number">{currentStreak}</span>
+      <span class="streak-label">day streak</span>
+    </div>
+    
+    <div class="streak-flame" aria-hidden="true">
+      {currentStreak > 0 && (
+        <svg viewBox="0 0 24 24" fill="currentColor" class={`flame ${currentStreak >= 7 ? 'flame--hot' : ''}`}>
+          <path d="M12 23c-4.97 0-9-3.58-9-8 0-2.21.895-4.21 2.34-5.66l.66.66c.39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41l-.66-.66C8.39 6.28 10.12 5 12 5c0 0 1.5 2 1.5 4.5 0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5c0-.28.22-.5.5-.5s.5.22.5.5c0 .28.22.5.5.5s.5-.22.5-.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5c0-1.81-.66-3.45-1.74-4.72C15.29 6.03 17 8.27 17 11c0 .34-.03.67-.08 1H17c2.21 0 4 1.79 4 4 0 4.42-4.03 8-9 8z"/>
+        </svg>
+      )}
+    </div>
+  </div>
+  
+  <div class="streak-progress">
+    <div class="progress-info">
+      <span class="progress-day">Day {currentDay} of {totalDays}</span>
+      <span class="progress-percent">{completionRate}% complete</span>
+    </div>
+    <div class="progress-bar-container">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" style={`width: ${progress}%`}></div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="streak-stats">
+    <div class="stat-item">
+      <span class="stat-value display-number">{bestStreak}</span>
+      <span class="stat-label">Best Streak</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-value display-number">{totalDays - currentDay}</span>
+      <span class="stat-label">Days Left</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .streak-display {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-card);
+  }
+  
+  .streak-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-5);
+  }
+  
+  .streak-number-wrapper {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .streak-number {
+    font-size: var(--text-3xl);
+    color: var(--accent-primary);
+    line-height: 1;
+  }
+  
+  .streak-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+  
+  .streak-flame {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .flame {
+    width: 100%;
+    height: 100%;
+    color: var(--accent-warning);
+    animation: flicker 2s ease-in-out infinite;
+  }
+  
+  .flame--hot {
+    color: var(--accent-danger);
+  }
+  
+  @keyframes flicker {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+  }
+  
+  .streak-progress {
+    margin-bottom: var(--space-5);
+  }
+  
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--space-2);
+  }
+  
+  .progress-day {
+    font-weight: var(--font-medium);
+    font-size: var(--text-sm);
+  }
+  
+  .progress-percent {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .progress-bar-container {
+    position: relative;
+  }
+  
+  .progress-bar-track {
+    height: 8px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+  
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-primary), var(--accent-success));
+    border-radius: var(--radius-full);
+    transition: width var(--duration-slow) var(--ease-out);
+  }
+  
+  .streak-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-light);
+  }
+  
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .stat-value {
+    font-size: var(--text-xl);
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  
+  .stat-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+  
+  .stat-divider {
+    width: 1px;
+    height: 32px;
+    background-color: var(--border-light);
+  }
+</style>

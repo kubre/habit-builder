@@ -1,0 +1,272 @@
+---
+// GoalCard Component - Individual goal check-in card
+import type { Goal } from '../scripts/types';
+
+interface Props {
+  goal: Goal;
+  completed: boolean;
+  note?: string;
+  dayNumber: number;
+}
+
+const { goal, completed, note, dayNumber } = Astro.props;
+---
+
+<div 
+  class={`goal-card ${completed ? 'goal-card--completed' : ''}`}
+  data-goal-id={goal.id}
+  data-completed={completed ? 'true' : 'false'}
+>
+  <button 
+    class={`goal-checkbox goal-${goal.color}`}
+    aria-label={completed ? `Unmark ${goal.name} as complete` : `Mark ${goal.name} as complete`}
+    data-action="toggle"
+  >
+    <span class="checkbox-fill"></span>
+    <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+  </button>
+  
+  <div class="goal-content">
+    <span class="goal-name">{goal.name}</span>
+    {note && <span class="goal-note-preview">{note}</span>}
+  </div>
+  
+  <button 
+    class="goal-note-btn"
+    aria-label="Add note"
+    data-action="note"
+  >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+    </svg>
+  </button>
+</div>
+
+<!-- Note Modal (will be controlled via JS) -->
+<div class="note-modal" data-modal-for={goal.id} hidden>
+  <div class="note-modal-backdrop" data-action="close-modal"></div>
+  <div class="note-modal-content">
+    <div class="note-modal-header">
+      <h3 class="note-modal-title">Note for {goal.name}</h3>
+      <button class="note-modal-close" data-action="close-modal" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <textarea 
+      class="note-textarea input"
+      placeholder="How did it go today? Any reflections..."
+      maxlength="500"
+    >{note || ''}</textarea>
+    <div class="note-modal-actions">
+      <button class="btn btn-primary btn-full" data-action="save-note">
+        Save Note
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .goal-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  
+  .goal-card:hover {
+    box-shadow: var(--shadow-md);
+  }
+  
+  .goal-card--completed {
+    background-color: var(--accent-success-light);
+  }
+  
+  .goal-checkbox {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-full);
+    border: 3px solid currentColor;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration-fast) var(--ease-out);
+    flex-shrink: 0;
+  }
+  
+  .goal-checkbox:hover {
+    transform: scale(1.05);
+  }
+  
+  .goal-checkbox:active {
+    transform: scale(0.95);
+  }
+  
+  .checkbox-fill {
+    position: absolute;
+    inset: 3px;
+    border-radius: var(--radius-full);
+    background-color: currentColor;
+    opacity: 0;
+    transform: scale(0);
+    transition: all var(--duration-fast) var(--ease-bounce);
+  }
+  
+  .goal-card--completed .checkbox-fill {
+    opacity: 1;
+    transform: scale(1);
+  }
+  
+  .checkbox-icon {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    color: white;
+    opacity: 0;
+    transform: scale(0);
+    transition: all var(--duration-fast) var(--ease-bounce);
+  }
+  
+  .goal-card--completed .checkbox-icon {
+    opacity: 1;
+    transform: scale(1);
+  }
+  
+  /* Goal colors */
+  .goal-coral { color: var(--goal-coral); }
+  .goal-sage { color: var(--goal-sage); }
+  .goal-gold { color: var(--goal-gold); }
+  .goal-slate { color: var(--goal-slate); }
+  .goal-sky { color: var(--goal-sky); }
+  .goal-plum { color: var(--goal-plum); }
+  
+  .goal-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  
+  .goal-name {
+    font-weight: var(--font-medium);
+    color: var(--text-primary);
+  }
+  
+  .goal-card--completed .goal-name {
+    color: var(--accent-success);
+  }
+  
+  .goal-note-preview {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .goal-note-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--duration-fast) var(--ease-out);
+    flex-shrink: 0;
+  }
+  
+  .goal-note-btn:hover {
+    color: var(--text-primary);
+  }
+  
+  .goal-note-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  
+  /* Note Modal */
+  .note-modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  
+  .note-modal[hidden] {
+    display: none;
+  }
+  
+  .note-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(45, 42, 38, 0.4);
+    animation: fadeIn var(--duration-fast) var(--ease-out);
+  }
+  
+  .note-modal-content {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding: var(--space-5);
+    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
+    animation: slideUp var(--duration-normal) var(--ease-out);
+  }
+  
+  .note-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+  }
+  
+  .note-modal-title {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+  }
+  
+  .note-modal-close {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .note-modal-close svg {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .note-textarea {
+    min-height: 120px;
+    margin-bottom: var(--space-4);
+  }
+  
+  .note-modal-actions {
+    display: flex;
+  }
+</style>

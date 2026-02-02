@@ -1,0 +1,328 @@
+---
+// DailyView Component - Today's goals dashboard
+import GoalCard from './GoalCard.astro';
+import StreakDisplay from './StreakDisplay.astro';
+import type { Challenge, DayEntry, Goal } from '../scripts/types';
+
+interface GoalStatus {
+  goal: Goal;
+  completed: boolean;
+  note?: string;
+}
+
+interface Props {
+  challenge: Challenge;
+  goalStatuses: GoalStatus[];
+  stats: {
+    currentStreak: number;
+    bestStreak: number;
+    currentDay: number;
+    totalDays: number;
+    completionRate: number;
+  };
+}
+
+const { challenge, goalStatuses, stats } = Astro.props;
+
+// Format today's date
+const today = new Date();
+const dateOptions: Intl.DateTimeFormatOptions = { 
+  weekday: 'long', 
+  month: 'long', 
+  day: 'numeric' 
+};
+const formattedDate = today.toLocaleDateString('en-US', dateOptions);
+
+// Check if all goals are complete
+const allComplete = goalStatuses.every(s => s.completed);
+---
+
+<div class="daily-view">
+  <header class="daily-header">
+    <div class="daily-date">
+      <span class="date-label">Today</span>
+      <h1 class="date-full">{formattedDate}</h1>
+    </div>
+    <div class="challenge-badge">
+      <span class="challenge-name">{challenge.name}</span>
+      {challenge.strictMode && (
+        <span class="strict-badge" title="Strict Mode Active">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+          </svg>
+        </span>
+      )}
+    </div>
+  </header>
+  
+  <section class="streak-section animate-fade-in">
+    <StreakDisplay {...stats} />
+  </section>
+  
+  <section class="goals-section">
+    <div class="goals-header">
+      <h2 class="goals-title">Today's Goals</h2>
+      {allComplete && (
+        <span class="all-complete-badge animate-scale-in">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          All Done!
+        </span>
+      )}
+    </div>
+    
+    <div class="goals-list" id="goals-list">
+      {goalStatuses.map((status, index) => (
+        <div class={`animate-slide-up delay-${index + 1}`}>
+          <GoalCard 
+            goal={status.goal}
+            completed={status.completed}
+            note={status.note}
+            dayNumber={stats.currentDay}
+          />
+        </div>
+      ))}
+    </div>
+  </section>
+  
+  {allComplete && (
+    <div class="celebration animate-scale-in">
+      <div class="celebration-content">
+        <span class="celebration-emoji">🎉</span>
+        <span class="celebration-text">Amazing! You crushed Day {stats.currentDay}!</span>
+      </div>
+    </div>
+  )}
+</div>
+
+<script>
+  import { toggleEntry, updateEntryNote, getEntry } from '../scripts/store';
+  import { getToday } from '../scripts/dates';
+  
+  const today = getToday();
+  const goalsList = document.getElementById('goals-list');
+  
+  // Handle goal toggle
+  goalsList?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const toggleBtn = target.closest('[data-action="toggle"]');
+    const noteBtn = target.closest('[data-action="note"]');
+    const closeModalBtn = target.closest('[data-action="close-modal"]');
+    const saveNoteBtn = target.closest('[data-action="save-note"]');
+    
+    if (toggleBtn) {
+      const card = toggleBtn.closest('.goal-card') as HTMLElement;
+      const goalId = card.dataset.goalId!;
+      
+      // Toggle in store
+      const entry = toggleEntry(today, goalId);
+      
+      // Update UI
+      card.classList.toggle('goal-card--completed', entry.completed);
+      card.dataset.completed = entry.completed ? 'true' : 'false';
+      
+      // Check if all complete
+      checkAllComplete();
+    }
+    
+    if (noteBtn) {
+      const card = noteBtn.closest('.goal-card') as HTMLElement;
+      const goalId = card.dataset.goalId!;
+      const modal = document.querySelector(`[data-modal-for="${goalId}"]`) as HTMLElement;
+      
+      if (modal) {
+        modal.hidden = false;
+        const textarea = modal.querySelector('.note-textarea') as HTMLTextAreaElement;
+        textarea.focus();
+      }
+    }
+  });
+  
+  // Handle modal actions
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const closeBtn = target.closest('[data-action="close-modal"]');
+    const saveBtn = target.closest('[data-action="save-note"]');
+    
+    if (closeBtn) {
+      const modal = closeBtn.closest('.note-modal') as HTMLElement;
+      if (modal) modal.hidden = true;
+    }
+    
+    if (saveBtn) {
+      const modal = saveBtn.closest('.note-modal') as HTMLElement;
+      const goalId = modal.dataset.modalFor!;
+      const textarea = modal.querySelector('.note-textarea') as HTMLTextAreaElement;
+      const note = textarea.value.trim();
+      
+      // Get current entry or create one
+      const existing = getEntry(today, goalId);
+      if (existing || note) {
+        updateEntryNote(today, goalId, note);
+        
+        // Also ensure the goal is marked as having a note in UI
+        const card = document.querySelector(`[data-goal-id="${goalId}"]`);
+        if (card) {
+          let preview = card.querySelector('.goal-note-preview');
+          if (note) {
+            if (!preview) {
+              preview = document.createElement('span');
+              preview.className = 'goal-note-preview';
+              card.querySelector('.goal-content')?.appendChild(preview);
+            }
+            preview.textContent = note;
+          } else if (preview) {
+            preview.remove();
+          }
+        }
+      }
+      
+      modal.hidden = true;
+    }
+  });
+  
+  // Close modal on escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.note-modal').forEach(modal => {
+        (modal as HTMLElement).hidden = true;
+      });
+    }
+  });
+  
+  function checkAllComplete() {
+    const cards = document.querySelectorAll('.goal-card');
+    const allComplete = Array.from(cards).every(card => 
+      card.classList.contains('goal-card--completed')
+    );
+    
+    const celebration = document.querySelector('.celebration');
+    const badge = document.querySelector('.all-complete-badge');
+    
+    if (allComplete) {
+      if (celebration) (celebration as HTMLElement).style.display = '';
+      if (badge) (badge as HTMLElement).style.display = '';
+    } else {
+      if (celebration) (celebration as HTMLElement).style.display = 'none';
+      if (badge) (badge as HTMLElement).style.display = 'none';
+    }
+  }
+</script>
+
+<style>
+  .daily-view {
+    padding: var(--space-5) var(--space-4);
+    padding-bottom: var(--space-8);
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  
+  .daily-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-6);
+  }
+  
+  .daily-date {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  
+  .date-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .date-full {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+  }
+  
+  .challenge-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+  }
+  
+  .challenge-name {
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+    color: var(--text-secondary);
+  }
+  
+  .strict-badge {
+    display: flex;
+    align-items: center;
+    color: var(--accent-warning);
+  }
+  
+  .streak-section {
+    margin-bottom: var(--space-6);
+  }
+  
+  .goals-section {
+    margin-bottom: var(--space-6);
+  }
+  
+  .goals-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-4);
+  }
+  
+  .goals-title {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+  }
+  
+  .all-complete-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    background-color: var(--accent-success-light);
+    color: var(--accent-success);
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+  }
+  
+  .goals-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  
+  .celebration {
+    padding: var(--space-4);
+    background: linear-gradient(135deg, var(--accent-success-light), var(--accent-warning-light));
+    border-radius: var(--radius-lg);
+    text-align: center;
+  }
+  
+  .celebration-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+  }
+  
+  .celebration-emoji {
+    font-size: var(--text-xl);
+  }
+  
+  .celebration-text {
+    font-weight: var(--font-medium);
+    color: var(--text-primary);
+  }
+</style>

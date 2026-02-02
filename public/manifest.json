@@ -1,0 +1,16 @@
+{
+  "name": "Habit Build",
+  "short_name": "Habit Build",
+  "description": "Build lasting habits through daily check-ins and visual streak tracking",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf6f1",
+  "theme_color": "#faf6f1",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,0 +1,316 @@
+---
+// History Page - View past challenges
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="History - Habit Build">
+  <div class="history-page container">
+    <header class="page-header">
+      <h1 class="page-title">Challenge History</h1>
+      <p class="page-subtitle">Your journey so far</p>
+    </header>
+    
+    <div class="history-list" id="history-list">
+      <!-- Challenges will be rendered here -->
+    </div>
+    
+    <div class="empty-state" id="empty-state" hidden>
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      </div>
+      <h2 class="empty-title">No History Yet</h2>
+      <p class="empty-description">Complete or end a challenge to see it here</p>
+      <a href="/" class="btn btn-primary">Go to Today</a>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { getPastChallenges, getChallengeEntries, initStore } from '../scripts/store';
+  import { formatFullDate } from '../scripts/dates';
+  
+  // Initialize and render
+  async function init() {
+    await initStore();
+    
+    const historyList = document.getElementById('history-list')!;
+    const emptyState = document.getElementById('empty-state')!;
+    
+    const challenges = await getPastChallenges();
+    
+    if (challenges.length === 0) {
+      historyList.style.display = 'none';
+      emptyState.hidden = false;
+    } else {
+      await renderChallenges(challenges);
+    }
+  }
+  
+  init();
+  
+  async function renderChallenges(challenges: any[]) {
+    const historyList = document.getElementById('history-list')!;
+    // Sort by end date, most recent first
+    const sorted = [...challenges].sort((a, b) => {
+      const dateA = a.endDate || a.startDate;
+      const dateB = b.endDate || b.startDate;
+      return dateB.localeCompare(dateA);
+    });
+    
+    // Build HTML for each challenge (need to await entries)
+    const htmlParts = await Promise.all(sorted.map(async (challenge) => {
+      const entries = await getChallengeEntries(challenge.id);
+      const completedDays = new Set(
+        entries.filter(e => e.completed).map(e => e.date)
+      ).size;
+      
+      const statusClass = challenge.status === 'completed' ? 'status--completed' :
+                         challenge.status === 'failed' ? 'status--failed' :
+                         'status--abandoned';
+      
+      const statusText = challenge.status === 'completed' ? 'Completed' :
+                        challenge.status === 'failed' ? `Failed on Day ${challenge.failedOnDay}` :
+                        'Abandoned';
+      
+      const statusIcon = challenge.status === 'completed' ? 
+        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>` :
+        challenge.status === 'failed' ?
+        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>` :
+        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
+      
+      return `
+        <div class="history-card">
+          <div class="history-header">
+            <div class="history-info">
+              <h3 class="history-name">${challenge.name}</h3>
+              <span class="history-dates">
+                ${formatFullDate(challenge.startDate)}
+                ${challenge.endDate ? ` - ${formatFullDate(challenge.endDate)}` : ''}
+              </span>
+            </div>
+            <div class="history-status ${statusClass}">
+              ${statusIcon}
+              <span>${statusText}</span>
+            </div>
+          </div>
+          
+          <div class="history-stats">
+            <div class="history-stat">
+              <span class="stat-value">${completedDays}</span>
+              <span class="stat-label">Days Completed</span>
+            </div>
+            <div class="history-stat">
+              <span class="stat-value">${challenge.duration}</span>
+              <span class="stat-label">Total Days</span>
+            </div>
+            <div class="history-stat">
+              <span class="stat-value">${challenge.goals.length}</span>
+              <span class="stat-label">Goals</span>
+            </div>
+          </div>
+          
+          <div class="history-goals">
+            ${challenge.goals.map((goal: any) => `
+              <span class="history-goal goal-${goal.color}">${goal.name}</span>
+            `).join('')}
+          </div>
+          
+          ${challenge.strictMode ? `
+            <div class="history-badge">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+              </svg>
+              Strict Mode
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }));
+    
+    historyList.innerHTML = htmlParts.join('');
+  }
+</script>
+
+<style>
+  .history-page {
+    padding: var(--space-5) var(--space-4);
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+  
+  .page-header {
+    text-align: center;
+    margin-bottom: var(--space-6);
+  }
+  
+  .page-title {
+    font-size: var(--text-2xl);
+    margin-bottom: var(--space-1);
+  }
+  
+  .page-subtitle {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+  
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  
+  .history-card {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-card);
+  }
+  
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  
+  .history-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .history-name {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-1);
+  }
+  
+  .history-dates {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .history-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: var(--font-medium);
+  }
+  
+  .history-status svg {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .status--completed {
+    background-color: var(--accent-success-light);
+    color: var(--accent-success);
+  }
+  
+  .status--failed {
+    background-color: var(--accent-danger-light);
+    color: var(--accent-danger);
+  }
+  
+  .status--abandoned {
+    background-color: var(--bg-secondary);
+    color: var(--text-muted);
+  }
+  
+  .history-stats {
+    display: flex;
+    justify-content: space-around;
+    padding: var(--space-4);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-4);
+  }
+  
+  .history-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .history-stat .stat-value {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+  }
+  
+  .history-stat .stat-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+  
+  .history-goals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  
+  .history-goal {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: var(--font-medium);
+    background-color: var(--bg-secondary);
+  }
+  
+  .history-goal.goal-coral { background-color: rgba(224, 122, 95, 0.15); color: var(--goal-coral); }
+  .history-goal.goal-sage { background-color: rgba(129, 178, 154, 0.15); color: var(--goal-sage); }
+  .history-goal.goal-gold { background-color: rgba(242, 204, 143, 0.15); color: #b8922a; }
+  .history-goal.goal-slate { background-color: rgba(61, 64, 91, 0.15); color: var(--goal-slate); }
+  .history-goal.goal-sky { background-color: rgba(126, 184, 218, 0.15); color: #4a8fb5; }
+  .history-goal.goal-plum { background-color: rgba(156, 137, 184, 0.15); color: var(--goal-plum); }
+  
+  .history-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-top: var(--space-3);
+    padding: var(--space-1) var(--space-2);
+    background-color: var(--accent-warning-light);
+    color: var(--accent-warning);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    font-weight: var(--font-medium);
+  }
+  
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: var(--space-10) var(--space-4);
+  }
+  
+  .empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto var(--space-4);
+    color: var(--text-muted);
+  }
+  
+  .empty-icon svg {
+    width: 100%;
+    height: 100%;
+  }
+  
+  .empty-title {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-2);
+  }
+  
+  .empty-description {
+    color: var(--text-muted);
+    margin-bottom: var(--space-5);
+  }
+</style>

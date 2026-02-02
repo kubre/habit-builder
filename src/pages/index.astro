@@ -1,0 +1,987 @@
+---
+// Main Page - Shows onboarding if no challenge, or daily view if active
+import Layout from '../layouts/Layout.astro';
+import Onboarding from '../components/Onboarding.astro';
+import DailyView from '../components/DailyView.astro';
+---
+
+<Layout title="Habit Build - Daily Check-in" showNav={false}>
+  <div id="app-root">
+    <!-- Content will be rendered client-side based on localStorage state -->
+    <div id="loading-state" class="loading-state">
+      <div class="loading-spinner"></div>
+    </div>
+  </div>
+  
+  <!-- Onboarding Template -->
+  <template id="onboarding-template">
+    <Onboarding />
+  </template>
+  
+  <!-- Strict Mode Failure Modal -->
+  <div id="strict-failure-modal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-icon modal-icon--warning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+      <h2 class="modal-title">Challenge Failed</h2>
+      <p class="modal-message">
+        You missed <strong>Day <span id="failed-day">0</span></strong> in strict mode.
+        <br/>Your challenge has been reset.
+      </p>
+      <p class="modal-submessage">
+        Don't worry — every setback is a setup for a comeback. Ready to try again?
+      </p>
+      <div class="modal-actions">
+        <button class="btn btn-primary btn-lg btn-full" id="restart-challenge-btn">
+          Start New Challenge
+        </button>
+        <button class="btn btn-ghost" id="view-history-btn">
+          View History
+        </button>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { getCurrentChallenge, initStore, toggleEntry, getEntry, setEntry } from '../scripts/store';
+  import { getTodayGoalsStatus, getChallengeStats, checkStrictModeViolation } from '../scripts/challenge';
+  import { getToday } from '../scripts/dates';
+  
+  // Initialize on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+  });
+  
+  async function initApp() {
+    const appRoot = document.getElementById('app-root')!;
+    const loadingState = document.getElementById('loading-state')!;
+    
+    try {
+      // Initialize the database
+      await initStore();
+      
+      const challenge = await getCurrentChallenge();
+      
+      if (!challenge) {
+        // Show onboarding
+        showOnboarding(appRoot, loadingState);
+      } else {
+        // Check for strict mode violation first
+        const failedDay = await checkStrictModeViolation(challenge);
+        
+        if (failedDay !== null) {
+          // Show failure modal
+          showStrictFailureModal(failedDay);
+          showOnboarding(appRoot, loadingState);
+        } else {
+          // Show daily view
+          await showDailyView(appRoot, loadingState, challenge);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to initialize app:', error);
+      showOnboarding(appRoot, loadingState);
+    }
+  }
+  
+  function showOnboarding(appRoot: HTMLElement, loadingState: HTMLElement) {
+    const template = document.getElementById('onboarding-template') as HTMLTemplateElement;
+    loadingState.remove();
+    appRoot.appendChild(template.content.cloneNode(true));
+    
+    // Re-run onboarding scripts
+    const scripts = appRoot.querySelectorAll('script');
+    scripts.forEach(script => {
+      const newScript = document.createElement('script');
+      newScript.textContent = script.textContent;
+      script.parentNode?.replaceChild(newScript, script);
+    });
+    
+    // Show nav for onboarding? No - hide it
+    const nav = document.querySelector('.nav');
+    if (nav) (nav as HTMLElement).style.display = 'none';
+  }
+  
+  async function showDailyView(appRoot: HTMLElement, loadingState: HTMLElement, challenge: any) {
+    const goalStatuses = await getTodayGoalsStatus(challenge);
+    const stats = await getChallengeStats(challenge);
+    
+    // Build daily view HTML
+    const html = buildDailyViewHTML(challenge, goalStatuses, stats);
+    loadingState.remove();
+    appRoot.innerHTML = html;
+    
+    // Show navigation
+    const nav = document.querySelector('.nav');
+    if (nav) (nav as HTMLElement).style.display = '';
+    
+    // Initialize daily view interactions
+    initDailyViewInteractions();
+  }
+  
+  function buildDailyViewHTML(challenge: any, goalStatuses: any[], stats: any) {
+    const today = new Date();
+    const dateOptions: Intl.DateTimeFormatOptions = { 
+      weekday: 'long', 
+      month: 'long', 
+      day: 'numeric' 
+    };
+    const formattedDate = today.toLocaleDateString('en-US', dateOptions);
+    const allComplete = goalStatuses.every(s => s.completed);
+    const progress = Math.min((stats.currentDay / stats.totalDays) * 100, 100);
+    
+    return `
+      <div class="daily-view">
+        <header class="daily-header">
+          <div class="daily-date">
+            <span class="date-label">Today</span>
+            <h1 class="date-full">${formattedDate}</h1>
+          </div>
+          <div class="challenge-badge">
+            <span class="challenge-name">${challenge.name}</span>
+            ${challenge.strictMode ? `
+              <span class="strict-badge" title="Strict Mode Active">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                  <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                </svg>
+              </span>
+            ` : ''}
+          </div>
+        </header>
+        
+        <section class="streak-section animate-fade-in">
+          ${buildStreakDisplayHTML(stats, progress)}
+        </section>
+        
+        <section class="goals-section">
+          <div class="goals-header">
+            <h2 class="goals-title">Today's Goals</h2>
+            ${allComplete ? `
+              <span class="all-complete-badge animate-scale-in">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                All Done!
+              </span>
+            ` : ''}
+          </div>
+          
+          <div class="goals-list" id="goals-list">
+            ${goalStatuses.map((status, index) => buildGoalCardHTML(status, index, stats.currentDay)).join('')}
+          </div>
+        </section>
+        
+        ${allComplete ? `
+          <div class="celebration animate-scale-in">
+            <div class="celebration-content">
+              <span class="celebration-emoji">🎉</span>
+              <span class="celebration-text">Amazing! You crushed Day ${stats.currentDay}!</span>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+      
+      ${goalStatuses.map(status => buildNoteModalHTML(status)).join('')}
+    `;
+  }
+  
+  function buildStreakDisplayHTML(stats: any, progress: number) {
+    return `
+      <div class="streak-display">
+        <div class="streak-main">
+          <div class="streak-number-wrapper">
+            <span class="streak-number display-number">${stats.currentStreak}</span>
+            <span class="streak-label">day streak</span>
+          </div>
+          
+          <div class="streak-flame" aria-hidden="true">
+            ${stats.currentStreak > 0 ? `
+              <svg viewBox="0 0 24 24" fill="currentColor" class="flame ${stats.currentStreak >= 7 ? 'flame--hot' : ''}">
+                <path d="M12 23c-4.97 0-9-3.58-9-8 0-2.21.895-4.21 2.34-5.66l.66.66c.39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41l-.66-.66C8.39 6.28 10.12 5 12 5c0 0 1.5 2 1.5 4.5 0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5c0-.28.22-.5.5-.5s.5.22.5.5c0 .28.22.5.5.5s.5-.22.5-.5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5c0-1.81-.66-3.45-1.74-4.72C15.29 6.03 17 8.27 17 11c0 .34-.03.67-.08 1H17c2.21 0 4 1.79 4 4 0 4.42-4.03 8-9 8z"/>
+              </svg>
+            ` : ''}
+          </div>
+        </div>
+        
+        <div class="streak-progress">
+          <div class="progress-info">
+            <span class="progress-day">Day ${stats.currentDay} of ${stats.totalDays}</span>
+            <span class="progress-percent">${stats.completionRate}% complete</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" style="width: ${progress}%"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="streak-stats">
+          <div class="stat-item">
+            <span class="stat-value display-number">${stats.bestStreak}</span>
+            <span class="stat-label">Best Streak</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value display-number">${Math.max(0, stats.totalDays - stats.currentDay)}</span>
+            <span class="stat-label">Days Left</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  function buildGoalCardHTML(status: any, index: number, dayNumber: number) {
+    const { goal, completed, note } = status;
+    return `
+      <div class="animate-slide-up delay-${index + 1}">
+        <div 
+          class="goal-card ${completed ? 'goal-card--completed' : ''}"
+          data-goal-id="${goal.id}"
+          data-completed="${completed ? 'true' : 'false'}"
+        >
+          <button 
+            class="goal-checkbox goal-${goal.color}"
+            aria-label="${completed ? `Unmark ${goal.name} as complete` : `Mark ${goal.name} as complete`}"
+            data-action="toggle"
+          >
+            <span class="checkbox-fill"></span>
+            <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </button>
+          
+          <div class="goal-content">
+            <span class="goal-name">${goal.name}</span>
+            ${note ? `<span class="goal-note-preview">${note}</span>` : ''}
+          </div>
+          
+          <button 
+            class="goal-note-btn"
+            aria-label="Add note"
+            data-action="note"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+  
+  function buildNoteModalHTML(status: any) {
+    const { goal, note } = status;
+    return `
+      <div class="note-modal" data-modal-for="${goal.id}" hidden>
+        <div class="note-modal-backdrop" data-action="close-modal"></div>
+        <div class="note-modal-content">
+          <div class="note-modal-header">
+            <h3 class="note-modal-title">Note for ${goal.name}</h3>
+            <button class="note-modal-close" data-action="close-modal" aria-label="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <textarea 
+            class="note-textarea input"
+            placeholder="How did it go today? Any reflections..."
+            maxlength="500"
+          >${note || ''}</textarea>
+          <div class="note-modal-actions">
+            <button class="btn btn-primary btn-full" data-action="save-note">
+              Save Note
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  function initDailyViewInteractions() {
+    const today = getToday();
+    const goalsList = document.getElementById('goals-list');
+    
+    // Handle goal toggle
+    goalsList?.addEventListener('click', async (e: Event) => {
+      const target = e.target as HTMLElement;
+      const toggleBtn = target.closest('[data-action="toggle"]');
+      const noteBtn = target.closest('[data-action="note"]');
+      
+      if (toggleBtn) {
+        const card = toggleBtn.closest('.goal-card') as HTMLElement;
+        const goalId = card.dataset.goalId!;
+        
+        // Toggle in store (async)
+        const entry = await toggleEntry(today, goalId);
+        
+        // Update UI
+        card.classList.toggle('goal-card--completed', entry.completed);
+        card.dataset.completed = entry.completed ? 'true' : 'false';
+        
+        // Check if all complete
+        checkAllComplete();
+      }
+      
+      if (noteBtn) {
+        const card = noteBtn.closest('.goal-card') as HTMLElement;
+        const goalId = card.dataset.goalId!;
+        const modal = document.querySelector(`[data-modal-for="${goalId}"]`) as HTMLElement;
+        
+        if (modal) {
+          modal.hidden = false;
+          const textarea = modal.querySelector('.note-textarea') as HTMLTextAreaElement;
+          textarea.focus();
+        }
+      }
+    });
+    
+    // Handle modal actions
+    document.addEventListener('click', async (e: Event) => {
+      const target = e.target as HTMLElement;
+      const closeBtn = target.closest('[data-action="close-modal"]');
+      const saveBtn = target.closest('[data-action="save-note"]');
+      
+      if (closeBtn) {
+        const modal = closeBtn.closest('.note-modal') as HTMLElement;
+        if (modal) modal.hidden = true;
+      }
+      
+      if (saveBtn) {
+        const modal = saveBtn.closest('.note-modal') as HTMLElement;
+        const goalId = modal.dataset.modalFor!;
+        const textarea = modal.querySelector('.note-textarea') as HTMLTextAreaElement;
+        const note = textarea.value.trim();
+        
+        // Get current entry or create one (async)
+        const existing = await getEntry(today, goalId);
+        if (note || existing) {
+          await setEntry(today, goalId, existing?.completed ?? false, note);
+          
+          // Update UI
+          const card = document.querySelector(`[data-goal-id="${goalId}"]`);
+          if (card) {
+            let preview = card.querySelector('.goal-note-preview');
+            if (note) {
+              if (!preview) {
+                preview = document.createElement('span');
+                preview.className = 'goal-note-preview';
+                card.querySelector('.goal-content')?.appendChild(preview);
+              }
+              preview.textContent = note;
+            } else if (preview) {
+              preview.remove();
+            }
+          }
+        }
+        
+        modal.hidden = true;
+      }
+    });
+    
+    // Close modal on escape
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.note-modal').forEach(modal => {
+          (modal as HTMLElement).hidden = true;
+        });
+      }
+    });
+  }
+  
+  function checkAllComplete() {
+    const cards = document.querySelectorAll('.goal-card');
+    const allComplete = Array.from(cards).every(card => 
+      card.classList.contains('goal-card--completed')
+    );
+    
+    const celebration = document.querySelector('.celebration');
+    const badge = document.querySelector('.all-complete-badge');
+    
+    if (allComplete) {
+      if (celebration) (celebration as HTMLElement).style.display = '';
+      if (badge) (badge as HTMLElement).style.display = '';
+      
+      // Add celebration if not present
+      if (!celebration) {
+        const section = document.querySelector('.goals-section');
+        if (section) {
+          const celebrationHTML = `
+            <div class="celebration animate-scale-in">
+              <div class="celebration-content">
+                <span class="celebration-emoji">🎉</span>
+                <span class="celebration-text">Amazing! You crushed today!</span>
+              </div>
+            </div>
+          `;
+          section.insertAdjacentHTML('afterend', celebrationHTML);
+        }
+      }
+    } else {
+      if (celebration) (celebration as HTMLElement).style.display = 'none';
+      if (badge) (badge as HTMLElement).style.display = 'none';
+    }
+  }
+  
+  function showStrictFailureModal(failedDay: number) {
+    const modal = document.getElementById('strict-failure-modal')!;
+    const daySpan = document.getElementById('failed-day')!;
+    daySpan.textContent = String(failedDay);
+    modal.hidden = false;
+    
+    document.getElementById('restart-challenge-btn')?.addEventListener('click', () => {
+      modal.hidden = true;
+    });
+    
+    document.getElementById('view-history-btn')?.addEventListener('click', () => {
+      window.location.href = '/history';
+    });
+  }
+</script>
+
+<style is:global>
+  /* Loading State */
+  .loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  
+  /* Modal Styles */
+  .modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+  }
+  
+  .modal[hidden] {
+    display: none;
+  }
+  
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(45, 42, 38, 0.6);
+  }
+  
+  .modal-content {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    text-align: center;
+    animation: scaleIn var(--duration-normal) var(--ease-out);
+  }
+  
+  .modal-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto var(--space-4);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .modal-icon--warning {
+    background-color: var(--accent-warning-light);
+    color: var(--accent-warning);
+  }
+  
+  .modal-icon svg {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .modal-title {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-3);
+  }
+  
+  .modal-message {
+    color: var(--text-secondary);
+    margin-bottom: var(--space-2);
+  }
+  
+  .modal-submessage {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-bottom: var(--space-5);
+  }
+  
+  .modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  
+  /* Daily View Styles */
+  .daily-view {
+    padding: var(--space-5) var(--space-4);
+    padding-bottom: var(--space-8);
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  
+  .daily-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-6);
+  }
+  
+  .daily-date {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  
+  .date-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .date-full {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+    color: var(--text-primary);
+  }
+  
+  .challenge-badge {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+  }
+  
+  .challenge-name {
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+    color: var(--text-secondary);
+  }
+  
+  .strict-badge {
+    display: flex;
+    align-items: center;
+    color: var(--accent-warning);
+  }
+  
+  .streak-section {
+    margin-bottom: var(--space-6);
+  }
+  
+  .goals-section {
+    margin-bottom: var(--space-6);
+  }
+  
+  .goals-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-4);
+  }
+  
+  .goals-title {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+  }
+  
+  .all-complete-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    background-color: var(--accent-success-light);
+    color: var(--accent-success);
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
+    font-weight: var(--font-medium);
+  }
+  
+  .goals-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  
+  .celebration {
+    padding: var(--space-4);
+    background: linear-gradient(135deg, var(--accent-success-light), var(--accent-warning-light));
+    border-radius: var(--radius-lg);
+    text-align: center;
+  }
+  
+  .celebration-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+  }
+  
+  .celebration-emoji {
+    font-size: var(--text-xl);
+  }
+  
+  .celebration-text {
+    font-weight: var(--font-medium);
+    color: var(--text-primary);
+  }
+  
+  /* Goal Card Styles */
+  .goal-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  
+  .goal-card:hover {
+    box-shadow: var(--shadow-md);
+  }
+  
+  .goal-card--completed {
+    background-color: var(--accent-success-light);
+  }
+  
+  .goal-checkbox {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-full);
+    border: 3px solid currentColor;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration-fast) var(--ease-out);
+    flex-shrink: 0;
+  }
+  
+  .goal-checkbox:hover {
+    transform: scale(1.05);
+  }
+  
+  .goal-checkbox:active {
+    transform: scale(0.95);
+  }
+  
+  .checkbox-fill {
+    position: absolute;
+    inset: 3px;
+    border-radius: var(--radius-full);
+    background-color: currentColor;
+    opacity: 0;
+    transform: scale(0);
+    transition: all var(--duration-fast) var(--ease-bounce);
+  }
+  
+  .goal-card--completed .checkbox-fill {
+    opacity: 1;
+    transform: scale(1);
+  }
+  
+  .checkbox-icon {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    color: white;
+    opacity: 0;
+    transform: scale(0);
+    transition: all var(--duration-fast) var(--ease-bounce);
+  }
+  
+  .goal-card--completed .checkbox-icon {
+    opacity: 1;
+    transform: scale(1);
+  }
+  
+  /* Goal colors */
+  .goal-coral { color: var(--goal-coral); }
+  .goal-sage { color: var(--goal-sage); }
+  .goal-gold { color: var(--goal-gold); }
+  .goal-slate { color: var(--goal-slate); }
+  .goal-sky { color: var(--goal-sky); }
+  .goal-plum { color: var(--goal-plum); }
+  
+  .goal-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  
+  .goal-name {
+    font-weight: var(--font-medium);
+    color: var(--text-primary);
+  }
+  
+  .goal-card--completed .goal-name {
+    color: var(--accent-success);
+  }
+  
+  .goal-note-preview {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .goal-note-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--duration-fast) var(--ease-out);
+    flex-shrink: 0;
+  }
+  
+  .goal-note-btn:hover {
+    color: var(--text-primary);
+  }
+  
+  .goal-note-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  
+  /* Note Modal */
+  .note-modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  
+  .note-modal[hidden] {
+    display: none;
+  }
+  
+  .note-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(45, 42, 38, 0.4);
+    animation: fadeIn var(--duration-fast) var(--ease-out);
+  }
+  
+  .note-modal-content {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding: var(--space-5);
+    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
+    animation: slideUp var(--duration-normal) var(--ease-out);
+  }
+  
+  .note-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+  }
+  
+  .note-modal-title {
+    font-size: var(--text-lg);
+    font-weight: var(--font-semibold);
+  }
+  
+  .note-modal-close {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .note-modal-close svg {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .note-textarea {
+    min-height: 120px;
+    margin-bottom: var(--space-4);
+  }
+  
+  .note-modal-actions {
+    display: flex;
+  }
+  
+  /* Streak Display */
+  .streak-display {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-xl);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-card);
+  }
+  
+  .streak-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-5);
+  }
+  
+  .streak-number-wrapper {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .streak-number {
+    font-size: var(--text-3xl);
+    color: var(--accent-primary);
+    line-height: 1;
+  }
+  
+  .streak-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+  
+  .streak-flame {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .flame {
+    width: 100%;
+    height: 100%;
+    color: var(--accent-warning);
+    animation: flicker 2s ease-in-out infinite;
+  }
+  
+  .flame--hot {
+    color: var(--accent-danger);
+  }
+  
+  @keyframes flicker {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+  }
+  
+  .streak-progress {
+    margin-bottom: var(--space-5);
+  }
+  
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--space-2);
+  }
+  
+  .progress-day {
+    font-weight: var(--font-medium);
+    font-size: var(--text-sm);
+  }
+  
+  .progress-percent {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .progress-bar-container {
+    position: relative;
+  }
+  
+  .progress-bar-track {
+    height: 8px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+  
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-primary), var(--accent-success));
+    border-radius: var(--radius-full);
+    transition: width var(--duration-slow) var(--ease-out);
+  }
+  
+  .streak-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-light);
+  }
+  
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .stat-value {
+    font-size: var(--text-xl);
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  
+  .stat-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-1);
+  }
+  
+  .stat-divider {
+    width: 1px;
+    height: 32px;
+    background-color: var(--border-light);
+  }
+</style>

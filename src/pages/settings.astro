@@ -1,0 +1,518 @@
+---
+// Settings Page - Manage challenge and data
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Settings - Habit Build">
+  <div class="settings-page container">
+    <header class="page-header">
+      <h1 class="page-title">Settings</h1>
+    </header>
+    
+    <!-- Current Challenge Section -->
+    <section class="settings-section" id="challenge-section">
+      <h2 class="section-title">Current Challenge</h2>
+      
+      <div class="settings-card" id="challenge-card">
+        <!-- Will be populated by JS -->
+      </div>
+      
+      <div class="no-challenge-card" id="no-challenge-card" hidden>
+        <p class="no-challenge-text">No active challenge</p>
+        <a href="/" class="btn btn-primary btn-full">Start New Challenge</a>
+      </div>
+    </section>
+    
+    <!-- Data Management Section -->
+    <section class="settings-section">
+      <h2 class="section-title">Data Management</h2>
+      
+      <div class="settings-card">
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-label">Export Data</span>
+            <span class="setting-description">Download all your data as JSON</span>
+          </div>
+          <button class="btn btn-secondary" id="export-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Export
+          </button>
+        </div>
+        
+        <div class="setting-item">
+          <div class="setting-info">
+            <span class="setting-label">Import Data</span>
+            <span class="setting-description">Restore from a backup file</span>
+          </div>
+          <label class="btn btn-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            Import
+            <input type="file" accept=".json" id="import-input" hidden />
+          </label>
+        </div>
+        
+        <div class="setting-item setting-item--danger">
+          <div class="setting-info">
+            <span class="setting-label">Clear All Data</span>
+            <span class="setting-description">Delete everything and start fresh</span>
+          </div>
+          <button class="btn btn-danger" id="clear-btn">Clear</button>
+        </div>
+      </div>
+    </section>
+    
+    <!-- About Section -->
+    <section class="settings-section">
+      <h2 class="section-title">About</h2>
+      
+      <div class="settings-card">
+        <div class="about-item">
+          <span class="about-label">Version</span>
+          <span class="about-value">1.0.0</span>
+        </div>
+        <div class="about-item">
+          <span class="about-label">Built with</span>
+          <span class="about-value">Astro + Vanilla JS</span>
+        </div>
+        <div class="about-item">
+          <span class="about-label">Data stored</span>
+          <span class="about-value">Locally in your browser</span>
+        </div>
+      </div>
+      
+      <div class="habit-science">
+        <h3 class="habit-science-title">Habit Science</h3>
+        <p class="habit-science-text">
+          Based on research from UCL and James Clear's Atomic Habits. 
+          On average, it takes <strong>66 days</strong> to form a new habit. 
+          Remember: missing one day doesn't break the chain - just never miss twice!
+        </p>
+      </div>
+    </section>
+    
+    <!-- Confirmation Modal -->
+    <div class="confirm-modal" id="confirm-modal" hidden>
+      <div class="confirm-backdrop" data-action="cancel"></div>
+      <div class="confirm-content">
+        <h3 class="confirm-title" id="confirm-title">Are you sure?</h3>
+        <p class="confirm-message" id="confirm-message">This action cannot be undone.</p>
+        <div class="confirm-actions">
+          <button class="btn btn-ghost" data-action="cancel">Cancel</button>
+          <button class="btn btn-danger" id="confirm-btn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { 
+    getCurrentChallenge, 
+    endChallenge, 
+    exportData, 
+    importData, 
+    clearAllData,
+    initStore 
+  } from '../scripts/store';
+  import { getChallengeStats } from '../scripts/challenge';
+  import { formatFullDate } from '../scripts/dates';
+  
+  const challengeCard = document.getElementById('challenge-card')!;
+  const noChallengeCard = document.getElementById('no-challenge-card')!;
+  const confirmModal = document.getElementById('confirm-modal')!;
+  
+  let currentConfirmAction: (() => void | Promise<void>) | null = null;
+  
+  // Initialize
+  async function init() {
+    await initStore();
+    
+    const challenge = await getCurrentChallenge();
+    
+    if (challenge) {
+      await renderChallengeCard(challenge);
+    } else {
+      challengeCard.style.display = 'none';
+      noChallengeCard.hidden = false;
+    }
+    
+    setupEventListeners();
+  }
+  
+  init();
+  
+  async function renderChallengeCard(challenge: any) {
+    const stats = await getChallengeStats(challenge);
+    
+    challengeCard.innerHTML = `
+      <div class="challenge-info">
+        <h3 class="challenge-name">${challenge.name}</h3>
+        <p class="challenge-meta">
+          Started ${formatFullDate(challenge.startDate)}
+          ${challenge.strictMode ? ' • Strict Mode' : ''}
+        </p>
+      </div>
+      
+      <div class="challenge-progress">
+        <div class="progress-text">
+          <span>Day ${stats.currentDay} of ${stats.totalDays}</span>
+          <span>${stats.completionRate}%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width: ${Math.min((stats.currentDay / stats.totalDays) * 100, 100)}%"></div>
+        </div>
+      </div>
+      
+      <div class="challenge-goals">
+        ${challenge.goals.map((goal: any) => `
+          <span class="challenge-goal goal-${goal.color}">${goal.name}</span>
+        `).join('')}
+      </div>
+      
+      <div class="challenge-actions">
+        <button class="btn btn-ghost btn-sm" id="abandon-btn">
+          Abandon Challenge
+        </button>
+      </div>
+    `;
+    
+    document.getElementById('abandon-btn')?.addEventListener('click', () => {
+      showConfirm(
+        'Abandon Challenge?',
+        'Your progress will be saved to history, but you\'ll need to start a new challenge.',
+        async () => {
+          await endChallenge(challenge.id, 'abandoned');
+          window.location.href = '/';
+        }
+      );
+    });
+  }
+  
+  function setupEventListeners() {
+    // Export
+    document.getElementById('export-btn')?.addEventListener('click', async () => {
+      const data = await exportData();
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `habit-build-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    
+    // Import
+    document.getElementById('import-input')?.addEventListener('change', (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        showConfirm(
+          'Import Data?',
+          'This will replace all your current data with the imported data.',
+          async () => {
+            if (await importData(content)) {
+              window.location.reload();
+            } else {
+              alert('Failed to import data. Please check the file format.');
+            }
+          }
+        );
+      };
+      reader.readAsText(file);
+    });
+    
+    // Clear data
+    document.getElementById('clear-btn')?.addEventListener('click', () => {
+      showConfirm(
+        'Clear All Data?',
+        'This will permanently delete all your challenges, goals, and progress. This cannot be undone.',
+        async () => {
+          await clearAllData();
+          window.location.href = '/';
+        }
+      );
+    });
+    
+    // Confirm button
+    document.getElementById('confirm-btn')?.addEventListener('click', async () => {
+      if (currentConfirmAction) {
+        await currentConfirmAction();
+      }
+      hideConfirm();
+    });
+    
+    // Cancel buttons
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-action="cancel"]')) {
+        hideConfirm();
+      }
+    });
+    
+    // Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        hideConfirm();
+      }
+    });
+  }
+  
+  // Confirmation modal
+  function showConfirm(title: string, message: string, onConfirm: () => void | Promise<void>) {
+    document.getElementById('confirm-title')!.textContent = title;
+    document.getElementById('confirm-message')!.textContent = message;
+    currentConfirmAction = onConfirm;
+    confirmModal.hidden = false;
+  }
+  
+  function hideConfirm() {
+    confirmModal.hidden = true;
+    currentConfirmAction = null;
+  }
+</script>
+
+<style>
+  .settings-page {
+    padding: var(--space-5) var(--space-4);
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+  
+  .page-header {
+    margin-bottom: var(--space-6);
+  }
+  
+  .page-title {
+    font-size: var(--text-2xl);
+  }
+  
+  .settings-section {
+    margin-bottom: var(--space-8);
+  }
+  
+  .section-title {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-3);
+  }
+  
+  .settings-card {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-card);
+  }
+  
+  .no-challenge-card {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    text-align: center;
+  }
+  
+  .no-challenge-text {
+    color: var(--text-muted);
+    margin-bottom: var(--space-4);
+  }
+  
+  /* Challenge Card */
+  .challenge-info {
+    margin-bottom: var(--space-4);
+  }
+  
+  .challenge-name {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-1);
+  }
+  
+  .challenge-meta {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .challenge-progress {
+    margin-bottom: var(--space-4);
+  }
+  
+  .progress-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-2);
+  }
+  
+  .progress-track {
+    height: 8px;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+  
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-primary), var(--accent-success));
+    border-radius: var(--radius-full);
+  }
+  
+  .challenge-goals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+  }
+  
+  .challenge-goal {
+    display: inline-flex;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: var(--font-medium);
+    background-color: var(--bg-secondary);
+  }
+  
+  .challenge-goal.goal-coral { background-color: rgba(224, 122, 95, 0.15); color: var(--goal-coral); }
+  .challenge-goal.goal-sage { background-color: rgba(129, 178, 154, 0.15); color: var(--goal-sage); }
+  .challenge-goal.goal-gold { background-color: rgba(242, 204, 143, 0.15); color: #b8922a; }
+  .challenge-goal.goal-slate { background-color: rgba(61, 64, 91, 0.15); color: var(--goal-slate); }
+  .challenge-goal.goal-sky { background-color: rgba(126, 184, 218, 0.15); color: #4a8fb5; }
+  .challenge-goal.goal-plum { background-color: rgba(156, 137, 184, 0.15); color: var(--goal-plum); }
+  
+  .challenge-actions {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-light);
+    text-align: center;
+  }
+  
+  /* Setting Items */
+  .setting-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+  }
+  
+  .setting-item:not(:last-child) {
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .setting-info {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .setting-label {
+    display: block;
+    font-weight: var(--font-medium);
+    margin-bottom: var(--space-1);
+  }
+  
+  .setting-description {
+    display: block;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .setting-item--danger .setting-label {
+    color: var(--accent-danger);
+  }
+  
+  /* About */
+  .about-item {
+    display: flex;
+    justify-content: space-between;
+    padding: var(--space-2) 0;
+  }
+  
+  .about-item:not(:last-child) {
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .about-label {
+    color: var(--text-secondary);
+  }
+  
+  .about-value {
+    font-weight: var(--font-medium);
+  }
+  
+  .habit-science {
+    margin-top: var(--space-4);
+    padding: var(--space-4);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+  }
+  
+  .habit-science-title {
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    margin-bottom: var(--space-2);
+  }
+  
+  .habit-science-text {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+  
+  /* Confirm Modal */
+  .confirm-modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+  }
+  
+  .confirm-modal[hidden] {
+    display: none;
+  }
+  
+  .confirm-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(45, 42, 38, 0.6);
+  }
+  
+  .confirm-content {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+    background-color: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    text-align: center;
+    animation: scaleIn var(--duration-normal) var(--ease-out);
+  }
+  
+  .confirm-title {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-2);
+  }
+  
+  .confirm-message {
+    color: var(--text-secondary);
+    margin-bottom: var(--space-5);
+  }
+  
+  .confirm-actions {
+    display: flex;
+    gap: var(--space-3);
+    justify-content: center;
+  }
+</style>

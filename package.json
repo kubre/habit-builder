@@ -1,0 +1,19 @@
+{
+  "name": "habit-build",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "A browser-based habit tracking app for building lasting habits",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "deploy": "bun run build && wrangler pages deploy ./dist"
+  },
+  "devDependencies": {
+    "astro": "^5.0.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}

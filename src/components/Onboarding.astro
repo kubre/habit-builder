@@ -1,0 +1,772 @@
+---
+// Onboarding Component - 3-step wizard for creating a new challenge
+import { GOAL_COLORS, DURATION_PRESETS, DEFAULT_DURATION, MAX_GOALS } from '../scripts/types';
+---
+
+<div class="onboarding" id="onboarding">
+  <div class="onboarding-header">
+    <h1 class="onboarding-title">Start Your Journey</h1>
+    <p class="onboarding-subtitle">Build lasting habits, one day at a time</p>
+  </div>
+  
+  <!-- Progress Indicator -->
+  <div class="progress-bar">
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <div class="progress-steps">
+      <span class="progress-step active" data-step="1">1</span>
+      <span class="progress-step" data-step="2">2</span>
+      <span class="progress-step" data-step="3">3</span>
+    </div>
+  </div>
+  
+  <!-- Step 1: Challenge Name -->
+  <div class="step step--active" data-step="1" id="step-1">
+    <div class="step-content">
+      <h2 class="step-title">Name Your Challenge</h2>
+      <p class="step-description">What transformation do you want to make?</p>
+      
+      <div class="input-group">
+        <label class="input-label" for="challenge-name">Challenge Name</label>
+        <input 
+          type="text" 
+          id="challenge-name" 
+          class="input input-underline"
+          placeholder="e.g., 75 Hard, Morning Routine, Fitness Journey"
+          maxlength="50"
+          required
+        />
+      </div>
+      
+      <div class="step-hint">
+        <strong>Tip:</strong> Frame it as who you want to become. 
+        "Become a morning person" works better than "Wake up early."
+      </div>
+    </div>
+    
+    <div class="step-actions">
+      <button class="btn btn-primary btn-lg btn-full" id="next-1" disabled>
+        Continue
+      </button>
+    </div>
+  </div>
+  
+  <!-- Step 2: Add Goals -->
+  <div class="step" data-step="2" id="step-2">
+    <div class="step-content">
+      <h2 class="step-title">Define Your Goals</h2>
+      <p class="step-description">What habits will you practice daily? (1-5 goals)</p>
+      
+      <div class="goals-list" id="goals-list">
+        <!-- Goals will be added here dynamically -->
+      </div>
+      
+      <button class="btn btn-secondary btn-full" id="add-goal" type="button">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        Add Goal
+      </button>
+      
+      <div class="step-hint">
+        <strong>Tip:</strong> Start small. "Read 1 page" is better than "Read 1 hour."
+        You can always increase later.
+      </div>
+    </div>
+    
+    <div class="step-actions">
+      <button class="btn btn-ghost" id="back-2">Back</button>
+      <button class="btn btn-primary btn-lg" id="next-2" disabled>
+        Continue
+      </button>
+    </div>
+  </div>
+  
+  <!-- Step 3: Duration & Mode -->
+  <div class="step" data-step="3" id="step-3">
+    <div class="step-content">
+      <h2 class="step-title">Set Your Challenge</h2>
+      <p class="step-description">How long will you commit?</p>
+      
+      <div class="duration-options" id="duration-options">
+        {DURATION_PRESETS.map(preset => (
+          <label class="duration-option" data-value={preset.value}>
+            <input 
+              type="radio" 
+              name="duration" 
+              value={preset.value} 
+              checked={preset.value === DEFAULT_DURATION}
+            />
+            <span class="duration-option-content">
+              <span class="duration-value">{preset.label}</span>
+              <span class="duration-desc">{preset.description}</span>
+            </span>
+          </label>
+        ))}
+        
+        <label class="duration-option" data-value="custom">
+          <input type="radio" name="duration" value="custom" />
+          <span class="duration-option-content">
+            <span class="duration-value">Custom</span>
+            <input 
+              type="number" 
+              id="custom-duration" 
+              class="custom-duration-input"
+              min="7" 
+              max="365" 
+              placeholder="Days"
+            />
+          </span>
+        </label>
+      </div>
+      
+      <div class="strict-mode-toggle">
+        <label class="toggle-container">
+          <div class="toggle-info">
+            <span class="toggle-label">Strict Mode (75 Hard Style)</span>
+            <span class="toggle-description">Miss a day? Start over from Day 1.</span>
+          </div>
+          <div class="toggle-switch">
+            <input type="checkbox" id="strict-mode" />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+      </div>
+      
+      <div class="step-hint warning" id="strict-warning" hidden>
+        <strong>Warning:</strong> Strict mode is challenging. 
+        If you miss any goal on any day, your entire challenge resets to Day 1.
+      </div>
+    </div>
+    
+    <div class="step-actions">
+      <button class="btn btn-ghost" id="back-3">Back</button>
+      <button class="btn btn-primary btn-lg" id="start-challenge">
+        Start Challenge
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Goal Color Palette (hidden, used by JS) -->
+<template id="color-options-template">
+  {GOAL_COLORS.map(color => (
+    <button type="button" class={`color-option goal-${color}`} data-color={color}>
+      <span class="sr-only">{color}</span>
+    </button>
+  ))}
+</template>
+
+<!-- Goal Item Template -->
+<template id="goal-template">
+  <div class="goal-item animate-slide-up">
+    <div class="goal-color-picker">
+      <button type="button" class="goal-color-btn" aria-label="Choose color">
+        <span class="goal-color-dot"></span>
+      </button>
+      <div class="color-dropdown" hidden>
+        <!-- Colors injected from template -->
+      </div>
+    </div>
+    <input type="text" class="goal-name-input input input-underline" placeholder="e.g., Exercise 30 min" maxlength="40" />
+    <button type="button" class="goal-remove-btn" aria-label="Remove goal">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+</template>
+
+<script>
+  import { createChallenge } from '../scripts/store';
+  import { GOAL_COLORS, MAX_GOALS, DEFAULT_DURATION } from '../scripts/types';
+  import type { GoalColor } from '../scripts/types';
+  
+  // State
+  let currentStep = 1;
+  let goals: { name: string; color: GoalColor }[] = [];
+  let selectedDuration = DEFAULT_DURATION;
+  
+  // Elements
+  const onboarding = document.getElementById('onboarding')!;
+  const progressFill = document.getElementById('progress-fill')!;
+  const progressSteps = document.querySelectorAll('.progress-step');
+  const challengeNameInput = document.getElementById('challenge-name') as HTMLInputElement;
+  const goalsList = document.getElementById('goals-list')!;
+  const addGoalBtn = document.getElementById('add-goal')!;
+  const strictModeCheckbox = document.getElementById('strict-mode') as HTMLInputElement;
+  const strictWarning = document.getElementById('strict-warning')!;
+  const customDurationInput = document.getElementById('custom-duration') as HTMLInputElement;
+  
+  // Step navigation
+  function goToStep(step: number) {
+    currentStep = step;
+    
+    // Update steps visibility
+    document.querySelectorAll('.step').forEach((el, i) => {
+      el.classList.toggle('step--active', i + 1 === step);
+    });
+    
+    // Update progress
+    progressFill.style.width = `${((step - 1) / 2) * 100}%`;
+    progressSteps.forEach((el, i) => {
+      el.classList.toggle('active', i + 1 <= step);
+      el.classList.toggle('completed', i + 1 < step);
+    });
+  }
+  
+  // Step 1: Challenge Name
+  challengeNameInput.addEventListener('input', () => {
+    const btn = document.getElementById('next-1') as HTMLButtonElement;
+    btn.disabled = challengeNameInput.value.trim().length < 2;
+  });
+  
+  document.getElementById('next-1')?.addEventListener('click', () => {
+    if (challengeNameInput.value.trim().length >= 2) {
+      goToStep(2);
+      // Add first goal if none exist
+      if (goals.length === 0) {
+        addGoal();
+      }
+    }
+  });
+  
+  // Step 2: Goals
+  function getNextColor(): GoalColor {
+    const usedColors = goals.map(g => g.color);
+    return GOAL_COLORS.find(c => !usedColors.includes(c)) || GOAL_COLORS[0];
+  }
+  
+  function addGoal() {
+    if (goals.length >= MAX_GOALS) return;
+    
+    const color = getNextColor();
+    const goalIndex = goals.length;
+    goals.push({ name: '', color });
+    
+    const template = document.getElementById('goal-template') as HTMLTemplateElement;
+    const colorTemplate = document.getElementById('color-options-template') as HTMLTemplateElement;
+    
+    const clone = template.content.cloneNode(true) as DocumentFragment;
+    const goalItem = clone.querySelector('.goal-item') as HTMLElement;
+    goalItem.dataset.index = String(goalIndex);
+    
+    // Set initial color
+    const colorDot = goalItem.querySelector('.goal-color-dot') as HTMLElement;
+    colorDot.className = `goal-color-dot goal-${color}`;
+    
+    // Add color options
+    const colorDropdown = goalItem.querySelector('.color-dropdown')!;
+    colorDropdown.appendChild(colorTemplate.content.cloneNode(true));
+    
+    // Set up color picker - only opens when user clicks, starts hidden
+    const colorBtn = goalItem.querySelector('.goal-color-btn')!;
+    colorBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      
+      // Close ALL other open dropdowns first
+      document.querySelectorAll('.goal-item').forEach(item => {
+        if (item !== goalItem) {
+          item.classList.remove('dropdown-open');
+          const dropdown = item.querySelector('.color-dropdown');
+          if (dropdown) dropdown.hidden = true;
+        }
+      });
+      
+      // Toggle this dropdown
+      const isOpen = !colorDropdown.hidden;
+      colorDropdown.hidden = isOpen;
+      goalItem.classList.toggle('dropdown-open', !isOpen);
+    });
+    
+    colorDropdown.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      const colorOption = target.closest('.color-option');
+      if (colorOption) {
+        const newColor = colorOption.dataset.color as GoalColor;
+        goals[goalIndex].color = newColor;
+        colorDot.className = `goal-color-dot goal-${newColor}`;
+        colorDropdown.hidden = true;
+        goalItem.classList.remove('dropdown-open');
+      }
+    });
+    
+    // Set up name input
+    const nameInput = goalItem.querySelector('.goal-name-input') as HTMLInputElement;
+    nameInput.addEventListener('input', () => {
+      goals[goalIndex].name = nameInput.value.trim();
+      updateGoalsState();
+    });
+    
+    // Set up remove button
+    const removeBtn = goalItem.querySelector('.goal-remove-btn')!;
+    removeBtn.addEventListener('click', () => {
+      goalItem.remove();
+      goals.splice(goalIndex, 1);
+      // Reindex remaining goals
+      goalsList.querySelectorAll('.goal-item').forEach((el, i) => {
+        (el as HTMLElement).dataset.index = String(i);
+      });
+      updateGoalsState();
+    });
+    
+    goalsList.appendChild(clone);
+    nameInput.focus();
+    updateGoalsState();
+  }
+  
+  function updateGoalsState() {
+    const validGoals = goals.filter(g => g.name.length >= 2);
+    const btn = document.getElementById('next-2') as HTMLButtonElement;
+    btn.disabled = validGoals.length < 1;
+    
+    // Show/hide add button
+    addGoalBtn.style.display = goals.length >= MAX_GOALS ? 'none' : '';
+  }
+  
+  addGoalBtn.addEventListener('click', addGoal);
+  
+  document.getElementById('back-2')?.addEventListener('click', () => goToStep(1));
+  document.getElementById('next-2')?.addEventListener('click', () => {
+    const validGoals = goals.filter(g => g.name.length >= 2);
+    if (validGoals.length >= 1) {
+      goals = validGoals;
+      goToStep(3);
+    }
+  });
+  
+  // Step 3: Duration & Mode
+  document.querySelectorAll('input[name="duration"]').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const value = (e.target as HTMLInputElement).value;
+      if (value === 'custom') {
+        customDurationInput.focus();
+      } else {
+        selectedDuration = parseInt(value, 10);
+      }
+    });
+  });
+  
+  customDurationInput.addEventListener('input', () => {
+    const value = parseInt(customDurationInput.value, 10);
+    if (value >= 7 && value <= 365) {
+      selectedDuration = value;
+    }
+  });
+  
+  strictModeCheckbox.addEventListener('change', () => {
+    strictWarning.hidden = !strictModeCheckbox.checked;
+  });
+  
+  document.getElementById('back-3')?.addEventListener('click', () => goToStep(2));
+  
+  document.getElementById('start-challenge')?.addEventListener('click', async () => {
+    const name = challengeNameInput.value.trim();
+    const validGoals = goals.filter(g => g.name.length >= 2);
+    const strictMode = strictModeCheckbox.checked;
+    
+    // Handle custom duration
+    const customRadio = document.querySelector('input[name="duration"][value="custom"]') as HTMLInputElement;
+    if (customRadio.checked) {
+      const customValue = parseInt(customDurationInput.value, 10);
+      if (customValue >= 7 && customValue <= 365) {
+        selectedDuration = customValue;
+      }
+    }
+    
+    if (name && validGoals.length >= 1) {
+      await createChallenge(name, validGoals, selectedDuration, strictMode);
+      window.location.reload();
+    }
+  });
+  
+  // Close color dropdowns when clicking outside
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.color-dropdown').forEach(el => {
+      (el as HTMLElement).hidden = true;
+    });
+    document.querySelectorAll('.goal-item.dropdown-open').forEach(el => {
+      el.classList.remove('dropdown-open');
+    });
+  });
+</script>
+
+<style>
+  .onboarding {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-6) var(--space-4);
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  
+  .onboarding-header {
+    text-align: center;
+    margin-bottom: var(--space-8);
+  }
+  
+  .onboarding-title {
+    font-size: var(--text-2xl);
+    margin-bottom: var(--space-2);
+    color: var(--text-primary);
+  }
+  
+  .onboarding-subtitle {
+    color: var(--text-muted);
+    font-size: var(--text-base);
+  }
+  
+  /* Progress Bar */
+  .progress-bar {
+    margin-bottom: var(--space-8);
+  }
+  
+  .progress-track {
+    height: 4px;
+    background-color: var(--border);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    margin-bottom: var(--space-4);
+  }
+  
+  .progress-fill {
+    height: 100%;
+    background-color: var(--accent-primary);
+    transition: width var(--duration-normal) var(--ease-out);
+    width: 0%;
+  }
+  
+  .progress-steps {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 var(--space-4);
+  }
+  
+  .progress-step {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-full);
+    background-color: var(--bg-secondary);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    font-weight: var(--font-semibold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  
+  .progress-step.active {
+    background-color: var(--accent-primary);
+    color: var(--text-inverse);
+  }
+  
+  .progress-step.completed {
+    background-color: var(--accent-success);
+    color: var(--text-inverse);
+  }
+  
+  /* Steps */
+  .step {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    animation: fadeIn var(--duration-normal) var(--ease-out);
+  }
+  
+  .step--active {
+    display: flex;
+  }
+  
+  .step-content {
+    flex: 1;
+  }
+  
+  .step-title {
+    font-size: var(--text-xl);
+    margin-bottom: var(--space-2);
+  }
+  
+  .step-description {
+    color: var(--text-secondary);
+    margin-bottom: var(--space-6);
+  }
+  
+  .step-hint {
+    margin-top: var(--space-6);
+    padding: var(--space-4);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+  
+  .step-hint.warning {
+    background-color: var(--accent-warning-light);
+    color: var(--text-primary);
+  }
+  
+  .step-actions {
+    display: flex;
+    gap: var(--space-3);
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+  }
+  
+  .step-actions .btn-primary {
+    flex: 1;
+  }
+  
+  /* Goals List */
+  .goals-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  
+  .goal-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    position: relative;
+    z-index: 1;
+  }
+  
+  /* Raise z-index when color picker is open */
+  .goal-item.dropdown-open {
+    z-index: 10;
+  }
+  
+  .goal-color-picker {
+    position: relative;
+    z-index: 2;
+  }
+  
+  .goal-color-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .goal-color-dot {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+  
+  .goal-color-btn:hover .goal-color-dot {
+    transform: scale(1.1);
+  }
+  
+  .color-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    display: none;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: var(--z-dropdown);
+  }
+  
+  /* Show dropdown when parent goal-item has dropdown-open class */
+  .goal-item.dropdown-open .color-dropdown {
+    display: flex;
+  }
+  
+  .color-option {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-full);
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  
+  .color-option:hover {
+    transform: scale(1.15);
+  }
+  
+  /* Goal colors */
+  .goal-coral { background-color: var(--goal-coral); }
+  .goal-sage { background-color: var(--goal-sage); }
+  .goal-gold { background-color: var(--goal-gold); }
+  .goal-slate { background-color: var(--goal-slate); }
+  .goal-sky { background-color: var(--goal-sky); }
+  .goal-plum { background-color: var(--goal-plum); }
+  
+  .goal-name-input {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .goal-remove-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--duration-fast) var(--ease-out);
+  }
+  
+  .goal-remove-btn:hover {
+    color: var(--accent-danger);
+  }
+  
+  /* Duration Options */
+  .duration-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-6);
+  }
+  
+  .duration-option {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+  
+  .duration-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .duration-option-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    background-color: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  
+  .duration-option input:checked + .duration-option-content {
+    border-color: var(--accent-primary);
+    background-color: rgba(199, 123, 88, 0.05);
+  }
+  
+  .duration-value {
+    font-weight: var(--font-semibold);
+  }
+  
+  .duration-desc {
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+  
+  .custom-duration-input {
+    width: 80px;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    text-align: center;
+  }
+  
+  /* Strict Mode Toggle */
+  .strict-mode-toggle {
+    margin-bottom: var(--space-4);
+  }
+  
+  .toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4);
+    background-color: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  
+  .toggle-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  
+  .toggle-label {
+    font-weight: var(--font-medium);
+  }
+  
+  .toggle-description {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .toggle-switch {
+    position: relative;
+    width: 48px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+  
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--border);
+    transition: var(--duration-fast);
+    border-radius: var(--radius-full);
+  }
+  
+  .toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: var(--duration-fast);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .toggle-switch input:checked + .toggle-slider {
+    background-color: var(--accent-warning);
+  }
+  
+  .toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+  }
+</style>
