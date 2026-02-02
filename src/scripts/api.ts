@@ -75,6 +75,36 @@ export interface FeedItem {
   timestamp: string;
 }
 
+export interface FriendGoalDetail {
+  id: string;
+  name: string;
+  color: string;
+  completed: boolean;
+  note?: string;
+}
+
+export interface FriendActivityResponse {
+  friend: {
+    id: string;
+    name: string;
+  };
+  challenge: {
+    id: string;
+    name: string;
+    currentDay: number;
+    totalDays: number;
+    startDate: string;
+  };
+  date: string;
+  goals: FriendGoalDetail[];
+  shareSettings: {
+    shareGoals: boolean;
+    shareStreak: boolean;
+    shareDailyStatus: boolean;
+    shareNotes: boolean;
+  };
+}
+
 export interface SyncChallenge {
   id: string;
   name: string;
@@ -311,4 +341,17 @@ export async function getFeed(limit = 20, offset = 0, forceReload = false): Prom
  */
 export async function refreshAllSocialData(): Promise<void> {
   invalidateSocialCache();
+}
+
+/**
+ * Get detailed activity for a specific friend on a specific date
+ */
+export async function getFriendActivity(
+  friendId: string,
+  challengeId: string,
+  date: string
+): Promise<APIResponse<FriendActivityResponse>> {
+  return apiRequest<FriendActivityResponse>(
+    `/friends/activity?friendId=${encodeURIComponent(friendId)}&challengeId=${encodeURIComponent(challengeId)}&date=${encodeURIComponent(date)}`
+  );
 }

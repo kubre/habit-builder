@@ -209,3 +209,34 @@ export interface APIError {
   error: string;
   code?: string;
 }
+
+// Friend Activity Detail Types
+export interface FriendGoalDetail {
+  id: string;
+  name: string;
+  color: string;
+  completed: boolean;
+  note?: string;
+}
+
+export interface FriendActivityResponse {
+  friend: {
+    id: string;
+    name: string;
+  };
+  challenge: {
+    id: string;
+    name: string;
+    currentDay: number;
+    totalDays: number;
+    startDate: string;
+  };
+  date: string;
+  goals: FriendGoalDetail[];
+  shareSettings: {
+    shareGoals: boolean;
+    shareStreak: boolean;
+    shareDailyStatus: boolean;
+    shareNotes: boolean;
+  };
+}

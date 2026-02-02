@@ -50,7 +50,7 @@ import DailyView from '../components/DailyView.astro';
 </Layout>
 
 <script>
-  import { getCurrentChallenge, initStore, toggleEntry, getEntry, setEntry } from '../scripts/store';
+  import { getCurrentChallenge, initStore, toggleEntry } from '../scripts/store';
   import { getTodayGoalsStatus, getChallengeStats, checkStrictModeViolation } from '../scripts/challenge';
   import { getToday } from '../scripts/dates';
   import { syncOnOpen } from '../scripts/sync';
@@ -206,7 +206,6 @@ import DailyView from '../components/DailyView.astro';
         ` : ''}
       </div>
       
-      ${goalStatuses.map(status => buildNoteModalHTML(status)).join('')}
     `;
   }
   
@@ -256,79 +255,41 @@ import DailyView from '../components/DailyView.astro';
   }
   
   function buildGoalCardHTML(status: any, index: number, _dayNumber: number) {
-    const { goal, completed, note } = status;
+    const { goal, completed } = status;
     const escapedName = escapeHTML(goal.name);
-    const escapedNote = escapeHTML(note);
     const escapedId = escapeAttr(goal.id);
     
     return `
       <div class="animate-slide-up delay-${index + 1}">
-        <div 
+        <button 
           class="goal-card ${completed ? 'goal-card--completed' : ''}"
           data-goal-id="${escapedId}"
           data-completed="${completed ? 'true' : 'false'}"
+          data-action="toggle"
+          aria-label="${completed ? `Unmark ${escapedName} as complete` : `Mark ${escapedName} as complete`}"
         >
-          <button 
-            class="goal-checkbox goal-${escapeAttr(goal.color)}"
-            aria-label="${completed ? `Unmark ${escapedName} as complete` : `Mark ${escapedName} as complete`}"
-            data-action="toggle"
-          >
+          <div class="goal-checkbox goal-${escapeAttr(goal.color)}">
             <span class="checkbox-fill"></span>
             <svg class="checkbox-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-          </button>
+          </div>
           
           <div class="goal-content">
             <span class="goal-name">${escapedName}</span>
-            ${note ? `<span class="goal-note-preview">${escapedNote}</span>` : ''}
+            <span class="goal-tap-hint">${completed ? 'Tap to unmark' : 'Tap to complete'}</span>
           </div>
           
-          <button 
-            class="goal-note-btn"
-            aria-label="Add note"
-            data-action="note"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-          </button>
-        </div>
-      </div>
-    `;
-  }
-  
-  function buildNoteModalHTML(status: any) {
-    const { goal, note } = status;
-    const escapedId = escapeAttr(goal.id);
-    const escapedName = escapeHTML(goal.name);
-    const escapedNote = escapeHTML(note);
-    
-    return `
-      <div class="note-modal" data-modal-for="${escapedId}" hidden>
-        <div class="note-modal-backdrop" data-action="close-modal"></div>
-        <div class="note-modal-content">
-          <div class="note-modal-header">
-            <h3 class="note-modal-title">Note for ${escapedName}</h3>
-            <button class="note-modal-close" data-action="close-modal" aria-label="Close">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
+          <div class="goal-status-indicator">
+            ${completed ? `
+              <svg class="status-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
-            </button>
+            ` : `
+              <div class="status-circle"></div>
+            `}
           </div>
-          <textarea 
-            class="note-textarea input"
-            placeholder="How did it go today? Any reflections..."
-            maxlength="500"
-          >${escapedNote}</textarea>
-          <div class="note-modal-actions">
-            <button class="btn btn-primary btn-full" data-action="save-note">
-              Save Note
-            </button>
-          </div>
-        </div>
+        </button>
       </div>
     `;
   }
@@ -337,14 +298,12 @@ import DailyView from '../components/DailyView.astro';
     const today = getToday();
     const goalsList = document.getElementById('goals-list');
     
-    // Handle goal toggle
+    // Handle goal toggle - entire card is now clickable
     goalsList?.addEventListener('click', async (e: Event) => {
       const target = e.target as HTMLElement;
-      const toggleBtn = target.closest('[data-action="toggle"]');
-      const noteBtn = target.closest('[data-action="note"]');
+      const card = target.closest('[data-action="toggle"]') as HTMLElement;
       
-      if (toggleBtn) {
-        const card = toggleBtn.closest('.goal-card') as HTMLElement;
+      if (card) {
         const goalId = card.dataset.goalId!;
         
         // Toggle in store (async)
@@ -354,72 +313,24 @@ import DailyView from '../components/DailyView.astro';
         card.classList.toggle('goal-card--completed', entry.completed);
         card.dataset.completed = entry.completed ? 'true' : 'false';
         
+        // Update tap hint text
+        const hint = card.querySelector('.goal-tap-hint');
+        if (hint) {
+          hint.textContent = entry.completed ? 'Tap to unmark' : 'Tap to complete';
+        }
+        
+        // Update status indicator
+        const statusIndicator = card.querySelector('.goal-status-indicator');
+        if (statusIndicator) {
+          statusIndicator.innerHTML = entry.completed ? `
+            <svg class="status-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          ` : `<div class="status-circle"></div>`;
+        }
+        
         // Check if all complete
         checkAllComplete();
-      }
-      
-      if (noteBtn) {
-        const card = noteBtn.closest('.goal-card') as HTMLElement;
-        const goalId = card.dataset.goalId!;
-        const modal = document.querySelector(`[data-modal-for="${goalId}"]`) as HTMLElement;
-        
-        if (modal) {
-          modal.hidden = false;
-          const textarea = modal.querySelector('.note-textarea') as HTMLTextAreaElement;
-          textarea.focus();
-        }
-      }
-    });
-    
-    // Handle modal actions
-    document.addEventListener('click', async (e: Event) => {
-      const target = e.target as HTMLElement;
-      const closeBtn = target.closest('[data-action="close-modal"]');
-      const saveBtn = target.closest('[data-action="save-note"]');
-      
-      if (closeBtn) {
-        const modal = closeBtn.closest('.note-modal') as HTMLElement;
-        if (modal) modal.hidden = true;
-      }
-      
-      if (saveBtn) {
-        const modal = saveBtn.closest('.note-modal') as HTMLElement;
-        const goalId = modal.dataset.modalFor!;
-        const textarea = modal.querySelector('.note-textarea') as HTMLTextAreaElement;
-        const note = textarea.value.trim();
-        
-        // Get current entry or create one (async)
-        const existing = await getEntry(today, goalId);
-        if (note || existing) {
-          await setEntry(today, goalId, existing?.completed ?? false, note);
-          
-          // Update UI
-          const card = document.querySelector(`[data-goal-id="${goalId}"]`);
-          if (card) {
-            let preview = card.querySelector('.goal-note-preview');
-            if (note) {
-              if (!preview) {
-                preview = document.createElement('span');
-                preview.className = 'goal-note-preview';
-                card.querySelector('.goal-content')?.appendChild(preview);
-              }
-              preview.textContent = note;
-            } else if (preview) {
-              preview.remove();
-            }
-          }
-        }
-        
-        modal.hidden = true;
-      }
-    });
-    
-    // Close modal on escape
-    document.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        document.querySelectorAll('.note-modal').forEach(modal => {
-          (modal as HTMLElement).hidden = true;
-        });
       }
     });
   }
@@ -691,43 +602,53 @@ import DailyView from '../components/DailyView.astro';
   .goal-card {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-4);
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
     background-color: var(--bg-card);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     box-shadow: var(--shadow-card);
     transition: all var(--duration-fast) var(--ease-out);
+    width: 100%;
+    text-align: left;
+    border: 2px solid transparent;
+    cursor: pointer;
   }
   
   .goal-card:hover {
     box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+  
+  .goal-card:active {
+    transform: scale(0.98);
+  }
+  
+  .goal-card:focus-visible {
+    border-color: var(--accent-primary);
+    outline: none;
   }
   
   .goal-card--completed {
     background-color: var(--accent-success-light);
+    border-color: var(--accent-success);
+  }
+  
+  .goal-card--completed:hover {
+    background-color: #c8e6c5;
   }
   
   .goal-checkbox {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 52px;
+    height: 52px;
     border-radius: var(--radius-full);
     border: 3px solid currentColor;
     background: transparent;
-    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all var(--duration-fast) var(--ease-out);
     flex-shrink: 0;
-  }
-  
-  .goal-checkbox:hover {
-    transform: scale(1.05);
-  }
-  
-  .goal-checkbox:active {
-    transform: scale(0.95);
   }
   
   .checkbox-fill {
@@ -747,8 +668,8 @@ import DailyView from '../components/DailyView.astro';
   
   .checkbox-icon {
     position: relative;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     color: white;
     opacity: 0;
     transform: scale(0);
@@ -773,11 +694,12 @@ import DailyView from '../components/DailyView.astro';
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 2px;
   }
   
   .goal-name {
-    font-weight: var(--font-medium);
+    font-weight: var(--font-semibold);
+    font-size: var(--text-lg);
     color: var(--text-primary);
   }
   
@@ -785,105 +707,39 @@ import DailyView from '../components/DailyView.astro';
     color: var(--accent-success);
   }
   
-  .goal-note-preview {
-    font-size: var(--text-sm);
+  .goal-tap-hint {
+    font-size: var(--text-xs);
     color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
   }
   
-  .goal-note-btn {
-    width: 40px;
-    height: 40px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
+  /* Status indicator on the right */
+  .goal-status-indicator {
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: color var(--duration-fast) var(--ease-out);
     flex-shrink: 0;
   }
   
-  .goal-note-btn:hover {
-    color: var(--text-primary);
-  }
-  
-  .goal-note-btn svg {
+  .status-circle {
     width: 20px;
     height: 20px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-full);
+    transition: all var(--duration-fast) var(--ease-out);
   }
   
-  /* Note Modal */
-  .note-modal {
-    position: fixed;
-    inset: 0;
-    z-index: var(--z-modal);
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
+  .goal-card:hover .status-circle {
+    border-color: var(--text-muted);
   }
   
-  .note-modal[hidden] {
-    display: none;
-  }
-  
-  .note-modal-backdrop {
-    position: absolute;
-    inset: 0;
-    background-color: rgba(45, 42, 38, 0.4);
-    animation: fadeIn var(--duration-fast) var(--ease-out);
-  }
-  
-  .note-modal-content {
-    position: relative;
-    width: 100%;
-    max-width: 480px;
-    background-color: var(--bg-card);
-    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    padding: var(--space-5);
-    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom));
-    animation: slideUp var(--duration-normal) var(--ease-out);
-  }
-  
-  .note-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-4);
-  }
-  
-  .note-modal-title {
-    font-size: var(--text-lg);
-    font-weight: var(--font-semibold);
-  }
-  
-  .note-modal-close {
-    width: 40px;
-    height: 40px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .note-modal-close svg {
+  .status-check {
     width: 24px;
     height: 24px;
-  }
-  
-  .note-textarea {
-    min-height: 120px;
-    margin-bottom: var(--space-4);
-  }
-  
-  .note-modal-actions {
-    display: flex;
+    color: var(--accent-success);
   }
   
   /* Streak Display */

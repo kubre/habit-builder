@@ -177,6 +177,46 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </div>
     
+    <!-- Friend Activity Detail Modal -->
+    <div id="activity-detail-modal" class="modal" hidden>
+      <div class="modal-backdrop" data-action="close-activity-detail"></div>
+      <div class="modal-content activity-detail-content">
+        <div class="activity-detail-header">
+          <div class="activity-detail-info">
+            <h2 class="activity-detail-name" id="detail-friend-name">Friend Name</h2>
+            <span class="activity-detail-challenge" id="detail-challenge-name">Challenge Name</span>
+          </div>
+          <button class="modal-close-btn" data-action="close-activity-detail" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="activity-detail-day">
+          <span class="detail-day-label">Day</span>
+          <span class="detail-day-number" id="detail-day-number">1</span>
+          <span class="detail-day-total" id="detail-day-total">of 75</span>
+        </div>
+        
+        <div class="activity-detail-date" id="detail-date">Today</div>
+        
+        <div class="activity-detail-goals" id="detail-goals-list">
+          <!-- Goals will be rendered here -->
+        </div>
+        
+        <div class="activity-detail-loading" id="detail-loading" hidden>
+          <div class="loading-spinner"></div>
+          <span>Loading...</span>
+        </div>
+        
+        <div class="activity-detail-error" id="detail-error" hidden>
+          <p>Failed to load activity details</p>
+        </div>
+      </div>
+    </div>
+    
     <!-- Add Friend Modal -->
     <div id="add-friend-modal" class="modal" hidden>
       <div class="modal-backdrop" data-action="close-add-friend"></div>
@@ -213,6 +253,7 @@ import Layout from '../layouts/Layout.astro';
     markRecoveryPhraseShown,
   } from '../scripts/auth';
   import * as api from '../scripts/api';
+  import type { FeedItem, FriendGoalDetail } from '../scripts/api';
   import { syncOnOpen } from '../scripts/sync';
   import { escapeHTML, escapeAttr } from '../scripts/ui';
   
@@ -584,7 +625,17 @@ import Layout from '../layouts/Layout.astro';
       const isComplete = item.completedGoals === item.totalGoals;
       const progressPercent = Math.min(100, Math.max(0, (item.completedGoals / item.totalGoals) * 100));
       return `
-        <div class="feed-card ${isComplete ? 'feed-card--complete' : ''}">
+        <button 
+          class="feed-card ${isComplete ? 'feed-card--complete' : ''}"
+          data-action="view-activity"
+          data-friend-id="${escapeAttr(item.friend.id)}"
+          data-friend-name="${escapeAttr(item.friend.name)}"
+          data-challenge-id="${escapeAttr(item.challenge.id)}"
+          data-challenge-name="${escapeAttr(item.challenge.name)}"
+          data-date="${escapeAttr(item.date)}"
+          data-day="${item.challenge.currentDay}"
+          data-total-days="${item.challenge.totalDays}"
+        >
           <div class="feed-header">
             <span class="feed-name">${escapeHTML(item.friend.name)}</span>
             <span class="feed-day">Day ${Number(item.challenge.currentDay)}</span>
@@ -596,10 +647,92 @@ import Layout from '../layouts/Layout.astro';
             </div>
             <span class="feed-progress-text">${Number(item.completedGoals)}/${Number(item.totalGoals)} goals</span>
           </div>
-        </div>
+          <div class="feed-tap-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </div>
+        </button>
       `;
     }).join('');
+    
+    // Add click handlers for feed cards
+    list.querySelectorAll('[data-action="view-activity"]').forEach(card => {
+      card.addEventListener('click', () => openActivityDetail(card as HTMLElement));
+    });
   }
+  
+  // Activity Detail Modal
+  const activityDetailModal = document.getElementById('activity-detail-modal')!;
+  
+  async function openActivityDetail(card: HTMLElement) {
+    const friendId = card.dataset.friendId!;
+    const friendName = card.dataset.friendName!;
+    const challengeId = card.dataset.challengeId!;
+    const challengeName = card.dataset.challengeName!;
+    const date = card.dataset.date!;
+    const day = card.dataset.day!;
+    const totalDays = card.dataset.totalDays!;
+    
+    // Set header info immediately
+    document.getElementById('detail-friend-name')!.textContent = friendName;
+    document.getElementById('detail-challenge-name')!.textContent = challengeName;
+    document.getElementById('detail-day-number')!.textContent = day;
+    document.getElementById('detail-day-total')!.textContent = `of ${totalDays}`;
+    
+    // Format date nicely
+    const dateObj = new Date(date + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isToday = dateObj.getTime() === today.getTime();
+    document.getElementById('detail-date')!.textContent = isToday 
+      ? 'Today' 
+      : dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    
+    // Show modal with loading state
+    activityDetailModal.hidden = false;
+    document.getElementById('detail-loading')!.hidden = false;
+    document.getElementById('detail-error')!.hidden = true;
+    document.getElementById('detail-goals-list')!.innerHTML = '';
+    
+    // Fetch detailed activity
+    const result = await api.getFriendActivity(friendId, challengeId, date);
+    
+    document.getElementById('detail-loading')!.hidden = true;
+    
+    if (result.error || !result.data) {
+      document.getElementById('detail-error')!.hidden = false;
+      return;
+    }
+    
+    // Render goals
+    const goals = result.data.goals;
+    const goalsList = document.getElementById('detail-goals-list')!;
+    
+    goalsList.innerHTML = goals.map(goal => `
+      <div class="detail-goal ${goal.completed ? 'detail-goal--completed' : ''}">
+        <div class="detail-goal-status goal-${escapeAttr(goal.color)}">
+          ${goal.completed ? `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="16" height="16">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          ` : ''}
+        </div>
+        <div class="detail-goal-info">
+          <span class="detail-goal-name">${escapeHTML(goal.name)}</span>
+          ${goal.note ? `<span class="detail-goal-note">${escapeHTML(goal.note)}</span>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  // Close activity detail modal
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-action="close-activity-detail"]')) {
+      activityDetailModal.hidden = true;
+    }
+  });
   
   // Initialize on load
   init();
@@ -1104,5 +1237,194 @@ import Layout from '../layouts/Layout.astro';
     font-size: var(--text-xs);
     color: var(--text-muted);
     min-width: 16px;
+  }
+  
+  /* Feed Card Interactive Styles */
+  .feed-card {
+    position: relative;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    border: none;
+  }
+  
+  .feed-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  
+  .feed-card:active {
+    transform: translateY(0);
+  }
+  
+  .feed-tap-hint {
+    position: absolute;
+    right: var(--space-4);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    opacity: 0.5;
+  }
+  
+  /* Activity Detail Modal */
+  .activity-detail-content {
+    max-width: 420px;
+  }
+  
+  .activity-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-4);
+  }
+  
+  .activity-detail-info {
+    flex: 1;
+  }
+  
+  .activity-detail-name {
+    font-size: var(--text-xl);
+    font-weight: var(--font-semibold);
+    margin-bottom: var(--space-1);
+  }
+  
+  .activity-detail-challenge {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+  }
+  
+  .modal-close-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    transition: all var(--duration-fast) var(--ease-out);
+  }
+  
+  .modal-close-btn:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+  
+  .activity-detail-day {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-3);
+  }
+  
+  .detail-day-label {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .detail-day-number {
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: var(--font-bold);
+    color: var(--accent-primary);
+  }
+  
+  .detail-day-total {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  
+  .activity-detail-date {
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    margin-bottom: var(--space-4);
+  }
+  
+  .activity-detail-goals {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  
+  .detail-goal {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+  }
+  
+  .detail-goal--completed {
+    background-color: var(--accent-success-light);
+  }
+  
+  .detail-goal-status {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    border: 3px solid currentColor;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  
+  .detail-goal--completed .detail-goal-status {
+    background-color: currentColor;
+  }
+  
+  .detail-goal-status svg {
+    color: white;
+  }
+  
+  .detail-goal-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  
+  .detail-goal-name {
+    font-weight: var(--font-medium);
+    font-size: var(--text-base);
+  }
+  
+  .detail-goal--completed .detail-goal-name {
+    color: var(--accent-success);
+  }
+  
+  .detail-goal-note {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    line-height: var(--leading-relaxed);
+  }
+  
+  .activity-detail-loading,
+  .activity-detail-error {
+    text-align: center;
+    padding: var(--space-6);
+    color: var(--text-muted);
+  }
+  
+  .loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent-primary);
+    border-radius: var(--radius-full);
+    animation: spin 1s linear infinite;
+    margin: 0 auto var(--space-2);
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>
