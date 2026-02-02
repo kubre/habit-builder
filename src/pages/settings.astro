@@ -243,7 +243,7 @@ import Layout from '../layouts/Layout.astro';
   
   function initSharingSettings(challenge: any) {
     // Set initial values
-    visibleToFriendsToggle.checked = challenge.visibleToFriends ?? false;
+    visibleToFriendsToggle.checked = challenge.visibleToFriends ?? true;
     shareGoalsToggle.checked = challenge.shareGoals ?? true;
     shareStreakToggle.checked = challenge.shareStreak ?? true;
     shareDailyStatusToggle.checked = challenge.shareDailyStatus ?? true;

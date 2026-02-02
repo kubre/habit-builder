@@ -27,7 +27,7 @@ function toSyncChallenge(challenge: Challenge): api.SyncChallenge {
     status: challenge.status,
     endDate: challenge.endDate,
     failedOnDay: challenge.failedOnDay,
-    visibleToFriends: challenge.visibleToFriends ?? false,
+    visibleToFriends: challenge.visibleToFriends ?? true,
     shareGoals: challenge.shareGoals ?? true,
     shareStreak: challenge.shareStreak ?? true,
     shareDailyStatus: challenge.shareDailyStatus ?? true,
