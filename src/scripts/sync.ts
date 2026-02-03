@@ -300,10 +300,19 @@ export async function tryRecoverFromCloud(): Promise<boolean> {
     }
     
     // Find and set the active challenge
+    // First try to find an active challenge, otherwise use the most recent one
     const activeChallenge = serverData.challenges.find(c => c.status === 'active');
     if (activeChallenge) {
       storage.setCurrentChallengeId(activeChallenge.id);
       console.log('Set active challenge:', activeChallenge.name);
+    } else if (serverData.challenges.length > 0) {
+      // No active challenge - set the most recent one (they can start a new one from settings)
+      // Sort by updatedAt descending and pick the first
+      const sortedChallenges = [...serverData.challenges].sort((a, b) => 
+        (b.updatedAt || '').localeCompare(a.updatedAt || '')
+      );
+      storage.setCurrentChallengeId(sortedChallenges[0].id);
+      console.log('Set most recent challenge:', sortedChallenges[0].name);
     }
     
     // Update sync timestamp

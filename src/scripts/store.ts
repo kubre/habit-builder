@@ -31,8 +31,32 @@ export function generateId(): string {
  */
 export function getCurrentChallenge(): Challenge | null {
   const currentId = storage.getCurrentChallengeId();
-  if (!currentId) return null;
-  return storage.getChallenge(currentId);
+  
+  if (currentId) {
+    const challenge = storage.getChallenge(currentId);
+    if (challenge) return challenge;
+  }
+  
+  // Fallback: if no currentChallengeId or challenge not found,
+  // try to find an active challenge and set it as current
+  const allChallenges = storage.getAllChallenges();
+  if (allChallenges.length > 0) {
+    // First look for an active challenge
+    const activeChallenge = allChallenges.find(c => c.status === 'active');
+    if (activeChallenge) {
+      storage.setCurrentChallengeId(activeChallenge.id);
+      return activeChallenge;
+    }
+    
+    // If no active challenge, return the most recent one
+    const sortedChallenges = [...allChallenges].sort((a, b) => 
+      (b.updatedAt || '').localeCompare(a.updatedAt || '')
+    );
+    storage.setCurrentChallengeId(sortedChallenges[0].id);
+    return sortedChallenges[0];
+  }
+  
+  return null;
 }
 
 /**
