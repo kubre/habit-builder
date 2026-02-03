@@ -230,6 +230,38 @@ Optional hardcore mode where missing any day resets the challenge to Day 0.
 - Inputs: bottom border style, no full outline
 - Calendar cells: 40-48px squares, centered content
 
+### SVG Icon Guidelines
+**Common Issue:** SVG icons appearing oversized or on separate lines.
+
+**Prevention:**
+1. Always add explicit `width` and `height` attributes to inline SVGs (don't rely on CSS alone)
+2. Add `flex-shrink: 0` to icon containers to prevent collapse
+3. Use `align-items: center` on flex containers with icons (not `flex-start`)
+4. Add `white-space: nowrap` to status badges containing icons + text
+
+**Example fix:**
+```html
+<!-- Bad: relies on CSS only -->
+<svg viewBox="0 0 24 24">...</svg>
+
+<!-- Good: explicit dimensions -->
+<svg viewBox="0 0 24 24" width="14" height="14">...</svg>
+```
+
+```css
+/* Container should prevent icon from growing/shrinking */
+.status-badge {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.status-badge svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+```
+
 ## Development Commands
 
 ```bash

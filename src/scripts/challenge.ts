@@ -63,11 +63,11 @@ export function isDayComplete(
 }
 
 /**
- * Check if a day was missed (past, not complete, and challenge was active)
+ * Check if a day was missed (past, zero goals completed, and challenge was active)
  */
 export function isDayMissed(
   date: string,
-  goals: Goal[],
+  _goals: Goal[],
   entries: DayEntry[],
   startDate: string
 ): boolean {
@@ -77,7 +77,11 @@ export function isDayMissed(
   // Can't miss days before challenge started
   if (date < startDate) return false;
   
-  return !isDayComplete(date, goals, entries);
+  // Only "missed" if NO goals were completed (partial days are not missed)
+  const dateEntries = entries.filter(e => e.date === date);
+  const completedCount = dateEntries.filter(e => e.completed).length;
+  
+  return completedCount === 0;
 }
 
 /**
